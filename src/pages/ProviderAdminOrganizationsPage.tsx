@@ -38,6 +38,7 @@ import { getAdministrationViewMode, setAdministrationViewMode, type ViewMode } f
 import { OrganizationDetailsPage } from '../components/provider-admin/OrganizationDetailsPage'
 import { ProviderAdminWorkspacePageHeader } from '../components/provider-admin/ProviderAdminWorkspacePageHeader'
 import { RegisterOrganizationWizard } from '../components/provider-admin/RegisterOrganizationWizard'
+import { TenantOnboardingWizard } from '../components/provider-admin/TenantOnboardingWizard'
 import { SetupIdentityProviderWizard } from '../components/provider-admin/SetupIdentityProviderWizard'
 import { AddTenantAdministratorWizard } from '../components/tenant-admin/AddTenantAdministratorWizard'
 import { IdpManagerIdentityProviderPage } from './idp-manager/IdpManagerIdentityProviderPage'
@@ -127,6 +128,9 @@ export function ProviderAdminOrganizationsPage({
     ensureProviderDemoOrganizations(),
   )
   const [isWizardOpen, setIsWizardOpen] = useState(false)
+  const [isOnboardingWizardOpen, setIsOnboardingWizardOpen] = useState(false)
+  const [onboardingResumeOrganization, setOnboardingResumeOrganization] =
+    useState<RegisteredOrganization | null>(null)
   const [editingOrganization, setEditingOrganization] = useState<RegisteredOrganization | null>(
     null,
   )
@@ -212,7 +216,8 @@ export function ProviderAdminOrganizationsPage({
     if (consumeProviderOpenRegisterOrgWizard()) {
       setEditingOrganization(null)
       setEditReturnToDetails(false)
-      setIsWizardOpen(true)
+      setOnboardingResumeOrganization(null)
+      setIsOnboardingWizardOpen(true)
     }
   }, [])
 
@@ -302,7 +307,21 @@ export function ProviderAdminOrganizationsPage({
   const openRegisterWizard = () => {
     setEditingOrganization(null)
     setEditReturnToDetails(false)
-    setIsWizardOpen(true)
+    setOnboardingResumeOrganization(null)
+    setIsOnboardingWizardOpen(true)
+  }
+
+  const openBillingSetup = (organization: RegisteredOrganization) => {
+    setEditingOrganization(null)
+    setEditReturnToDetails(false)
+    setOnboardingResumeOrganization(organization)
+    setIsOnboardingWizardOpen(true)
+    setIsDetailsOpen(false)
+  }
+
+  const closeOnboardingWizard = () => {
+    setIsOnboardingWizardOpen(false)
+    setOnboardingResumeOrganization(null)
   }
 
   const openEdit = (organization: RegisteredOrganization, returnToDetails = false) => {
@@ -366,6 +385,52 @@ export function ProviderAdminOrganizationsPage({
     setOrganizationPendingRemove(null)
   }
 
+  const handleOnboardingPersist = (organization: RegisteredOrganization) => {
+    const existing = getProviderRegisteredOrganizations().find(
+      (item) => item.id === organization.id,
+    )
+    if (existing) {
+      updateProviderRegisteredOrganization(organization.id, {
+        name: organization.name,
+        tenantId: organization.tenantId,
+        displayName: organization.displayName,
+        m360AccountId: organization.m360AccountId,
+        m360ConnectionStatus: organization.m360ConnectionStatus,
+        m360RateCardId: organization.m360RateCardId,
+        m360RateCardName: organization.m360RateCardName,
+        billingAccountId: organization.billingAccountId,
+        billingAccountName: organization.billingAccountName,
+        billingAccountLinked: organization.billingAccountLinked,
+        tenantSetupStatus: organization.tenantSetupStatus,
+      })
+    } else {
+      addProviderRegisteredOrganization(organization)
+      if (organization.externalIpPoolId) {
+        assignExternalIpPoolToRegisteredOrganization(
+          organization.externalIpPoolId,
+          organization.id,
+        )
+      }
+      if (organization.catalogItemId && catalogDraft) {
+        assignCatalogToRegisteredOrganization(organization.id, catalogDraft)
+      }
+    }
+    refreshOrganizations(organization.id)
+  }
+
+  const handleOnboardingComplete = (organization: RegisteredOrganization) => {
+    setSearchValue('')
+    setSelectedStatus('all')
+    setSelectedSetup('all')
+
+    if (peekProviderVipCatalogResumeIntent()) {
+      onNavigate?.('catalog')
+      return
+    }
+
+    beginOrganizationCreateReveal(organization.id)
+  }
+
   const handleRegister = (organization: RegisteredOrganization) => {
     addProviderRegisteredOrganization(organization)
     if (organization.externalIpPoolId) {
@@ -406,6 +471,11 @@ export function ProviderAdminOrganizationsPage({
     organization: RegisteredOrganization,
     action: OrganizationSetupNextAction,
   ) => {
+    if (action === 'billing') {
+      openBillingSetup(organization)
+      return
+    }
+
     if (action === 'idp') {
       if (organization.identityProviderConnected) {
         openIdpDirectory(organization)
@@ -480,6 +550,15 @@ export function ProviderAdminOrganizationsPage({
             setRolesOrganization(null)
           }}
         />
+      ) : isOnboardingWizardOpen ? (
+        <TenantOnboardingWizard
+          isOpen={isOnboardingWizardOpen}
+          catalogDraft={catalogDraft}
+          resumeOrganization={onboardingResumeOrganization}
+          onClose={closeOnboardingWizard}
+          onPersistOrganization={handleOnboardingPersist}
+          onComplete={handleOnboardingComplete}
+        />
       ) : isWizardOpen ? (
         <RegisterOrganizationWizard
           key={editingOrganization?.id ?? 'register-tenant'}
@@ -520,6 +599,7 @@ export function ProviderAdminOrganizationsPage({
           onBack={closeDetails}
           onEdit={() => openEdit(selectedOrganization, true)}
           onRemove={() => openRemove(selectedOrganization)}
+          onReviewBilling={(organization) => openBillingSetup(organization)}
           onReviewIdentityProvider={(organization) => {
             if (organization.identityProviderConnected) {
               openIdpDirectory(organization)

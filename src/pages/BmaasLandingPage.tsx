@@ -149,6 +149,10 @@ export function BmaasLandingPage() {
       label: 'External IP Pools',
       to: '/provider/workspace?nav=networking',
     },
+    {
+      label: 'M360 billing account',
+      to: '/m360/accounts',
+    },
   ]
 
   const roles: RoleBlockProps[] = [
@@ -223,6 +227,10 @@ export function BmaasLandingPage() {
             to: '/tenant-user/northsummit/workspace?nav=networking-external-ip-pools',
           },
         },
+        {
+          label: 'Launch (cost estimate)',
+          to: '/tenant-user/northsummit/workspace?nav=catalog&item=bare-metal-gpu-training-server',
+        },
       ],
     },
   ]
@@ -246,7 +254,7 @@ export function BmaasLandingPage() {
           >
             <Brand src={redHatHatLogoUrl} alt="Red Hat" heights={{ default: '52px' }} />
             <Title headingLevel="h1" size="4xl">
-              Red Hat OSAC Prototypes 0.2
+              Red Hat OSAC Prototypes 0.3
             </Title>
             <Content component="p">Select a role to access the customized interface.</Content>
           </Flex>

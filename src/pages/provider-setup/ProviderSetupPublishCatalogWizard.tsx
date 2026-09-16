@@ -113,6 +113,7 @@ import {
   type PublishedTemplatePayload,
   type SavedMasterTemplate,
 } from '../../providerSetup/templateDemo'
+import { isTemplateM360RateConfigured } from '../../billing/m360'
 import type { ProviderCatalogDraft } from '../../providerSetup/storage'
 import { getCatalogItemStatus } from '../../providerSetup/storage'
 
@@ -406,13 +407,17 @@ export function ProviderSetupPublishCatalogWizard({
     getCatalogEditPreviousValue(editBaseline, fieldId, currentEditSnapshot)
   const isEditingLiveCatalog =
     isEditMode && editingCatalog ? getCatalogItemStatus(editingCatalog) === 'live' : false
+  const templateRateConfigured = selectedTemplate
+    ? isTemplateM360RateConfigured(selectedTemplate.templateRefId)
+    : true
   const canCreateCatalogItem =
     Boolean(selectedServiceId) &&
     Boolean(selectedTemplate) &&
     Boolean(selectedInstanceType) &&
     Boolean(selectedDiskImage) &&
     (!isClusterService || (Boolean(selectedNodeSetId) && Boolean(selectedHostTypeId))) &&
-    isValidKubernetesResourceName(displayName)
+    isValidKubernetesResourceName(displayName) &&
+    templateRateConfigured
   const canSaveCatalogEdit = canCreateCatalogItem && (!isEditMode || editChanges.length > 0)
   const hasLockableParameters = fieldPolicies.length > 0
   const hasSingleTemplate = templates.length <= 1
@@ -2167,6 +2172,19 @@ export function ProviderSetupPublishCatalogWizard({
               </>
             ) : (
               <>
+            {!templateRateConfigured ? (
+              <Alert
+                variant="warning"
+                isInline
+                title="Rate card missing in M360"
+                className="provider-setup-template__publish-review-alert"
+              >
+                <Content component="p">
+                  This offering cannot be created until a matching rate card exists in M360.
+                  Configure the rate externally, then refresh pricing in the catalog.
+                </Content>
+              </Alert>
+            ) : null}
             <DescriptionList
               isCompact
               className="provider-setup-template__publish-review-list"

@@ -49,6 +49,8 @@ import {
   resolveCatalogSpecRows,
   resolveVmCatalogHighlightRows,
 } from '../../catalog/catalogSpecs'
+import { canPublishCatalogItemToTenants } from '../../billing/m360'
+import { M360RateStatusLabel } from '../billing/M360RateStatusLabel'
 import { formatCatalogFieldPolicyMode } from '../../catalog/catalogPublishConfig'
 
 /** Demo delay for Publish → Publishing ... */
@@ -212,6 +214,7 @@ export function CatalogItemDetailsPage({
   const showPublishing = publishCtaPhase === 'publishing'
   const showPublish = publishCtaPhase === 'publish'
   const showLive = publishCtaPhase === 'live'
+  const publishBlocked = !canPublishCatalogItemToTenants(catalog)
 
   return (
     <div className="provider-admin-catalog-item-details">
@@ -259,7 +262,12 @@ export function CatalogItemDetailsPage({
               <Button
                 variant="primary"
                 onClick={handlePublishClick}
-                isDisabled={showPublishing}
+                isDisabled={showPublishing || publishBlocked}
+                title={
+                  publishBlocked
+                    ? 'Configure the rate card in M360 before publishing to tenants.'
+                    : undefined
+                }
               >
                 Publish
               </Button>
@@ -386,7 +394,10 @@ export function CatalogItemDetailsPage({
                 <DescriptionListGroup>
                   <DescriptionListTerm>Rate</DescriptionListTerm>
                   <DescriptionListDescription>
-                    {formatRateCardSummary(catalog.rateCard)}
+                    <M360RateStatusLabel item={catalog} />
+                    {canPublishCatalogItemToTenants(catalog)
+                      ? formatRateCardSummary(catalog.rateCard)
+                      : null}
                   </DescriptionListDescription>
                 </DescriptionListGroup>
               </DescriptionList>

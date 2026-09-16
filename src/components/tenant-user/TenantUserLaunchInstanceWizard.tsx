@@ -117,6 +117,8 @@ import { CreateSecurityGroupWizard } from '../networking/CreateSecurityGroupWiza
 import { CreateSubnetWizard } from '../networking/CreateSubnetWizard'
 import { CreateVirtualNetworkWizard } from '../networking/CreateVirtualNetworkWizard'
 import { CreateTenantProjectWizard } from '../tenant-admin/CreateTenantProjectWizard'
+import { estimateLaunchHourlyCost } from '../../billing/m360'
+import { LaunchCostPanel } from '../billing/LaunchCostPanel'
 import { useWizardLeaveConfirm } from '../shared/useWizardLeaveConfirm'
 import type { LaunchNetworkFieldKind } from '../../tenantUser/launchNetworking'
 
@@ -468,6 +470,25 @@ export function TenantUserLaunchInstanceWizard({
       tenantSlug,
     }),
   )
+  const hourlyLaunchEstimate = useMemo(() => {
+    if (!catalogDraft) {
+      return null
+    }
+
+    return estimateLaunchHourlyCost({
+      catalogItem: catalogDraft,
+      instanceType: form.instanceType || catalogItem.instanceTypeId,
+      bootDiskSizeGiB: isVmCatalogItem ? form.bootDiskSizeGiB : undefined,
+    })
+  }, [
+    catalogDraft,
+    catalogItem.instanceTypeId,
+    form.bootDiskSizeGiB,
+    form.instanceType,
+    isVmCatalogItem,
+  ])
+  const selectedProjectName = selectedProject?.name
+
   const [activeStepId, setActiveStepId] = useState<LaunchInstanceWizardStepId>(
     usesGeneralFirstStep ? 'general' : 'configure',
   )
@@ -1833,6 +1854,11 @@ export function TenantUserLaunchInstanceWizard({
         {LAUNCH_INSTANCE_WIZARD_DEMO.configureLede}
       </Content>
 
+      <LaunchCostPanel
+        hourlyEstimate={hourlyLaunchEstimate}
+        projectName={selectedProjectName}
+      />
+
       <Form autoComplete="off" className="tenant-user-launch-wizard__form">
         {renderProjectField('launch-instance-project')}
 
@@ -2040,6 +2066,11 @@ export function TenantUserLaunchInstanceWizard({
         <Content component="h2" className="tenant-user-launch-wizard__step-title">
           {LAUNCH_INSTANCE_WIZARD_DEMO.reviewTitle}
         </Content>
+
+        <LaunchCostPanel
+          hourlyEstimate={hourlyLaunchEstimate}
+          projectName={selectedProjectName}
+        />
 
         <Alert
           variant="info"

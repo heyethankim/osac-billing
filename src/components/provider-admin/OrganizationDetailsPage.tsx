@@ -24,17 +24,26 @@ import {
   ModalVariant,
   Title,
 } from '@patternfly/react-core'
+import {
+  getOrganizationDisplayName,
+  getOrganizationM360AccountId,
+  getOrganizationM360ConnectionStatus,
+} from '../../billing/m360'
+import { M360ConnectionStatusField } from '../billing/M360ConnectionStatusField'
 import { EntityDetailsPageShell } from '../shared/EntityDetailsPageShell'
 import { EntityDetailsActionsDropdown } from '../shared/EntityDetailsActionsDropdown'
 import {
-  formatOrganizationRolesAssignmentSummary,
   getOrganizationActivationSteps,
   getOrganizationOsacLoginPath,
+  getTenantSetupStatusColor,
+  getTenantSetupStatusLabel,
   hasPendingIdpInvite,
   identityProviderConnectedByLabel,
   isOrganizationReadyForLogin,
+  isTenantReadyForProvisioning,
   resolveBreakGlassUsername,
   resolveIdentityProviderConnectedBy,
+  resolveTenantSetupStatus,
   isHarborlineCapitalOrganization,
   resolveOrganizationCompanyLogo,
   type OrganizationActivationStep,
@@ -56,6 +65,7 @@ type OrganizationDetailsPageProps = {
   onBack: () => void
   onEdit?: () => void
   onRemove?: () => void
+  onReviewBilling?: (organization: RegisteredOrganization) => void
   onReviewIdentityProvider?: (organization: RegisteredOrganization) => void
   onReviewRoles?: (organization: RegisteredOrganization) => void
   onOrganizationChange?: (organization: RegisteredOrganization) => void
@@ -148,13 +158,13 @@ function AccountPersonRow({
 function ActivationStepRow({
   step,
   organization,
+  onReviewBilling,
   onReviewIdentityProvider,
-  onReviewRoles,
 }: {
   step: OrganizationActivationStep
   organization: RegisteredOrganization
+  onReviewBilling?: (organization: RegisteredOrganization) => void
   onReviewIdentityProvider?: (organization: RegisteredOrganization) => void
-  onReviewRoles?: (organization: RegisteredOrganization) => void
 }) {
   const idpMeta = step.id === 'idp' ? getIdentityProviderStepMeta(organization) : null
   const connectedBy =
@@ -162,16 +172,23 @@ function ActivationStepRow({
   const idpConnectedByLabel = connectedBy
     ? identityProviderConnectedByLabel(connectedBy)
     : null
-  const rolesMeta =
-    step.id === 'rbac' && step.complete
-      ? formatOrganizationRolesAssignmentSummary(organization)
-      : null
-  const canReviewIdp = step.id === 'idp' && typeof onReviewIdentityProvider === 'function'
-  const canReviewRoles =
-    step.id === 'rbac' &&
+  const billingMeta =
+    step.id === 'billing_account' && organization.billingAccountName
+      ? organization.billingAccountName
+      : step.id === 'rate_card' && organization.m360RateCardName
+        ? organization.m360RateCardName
+        : null
+  const canReviewBilling =
+    (step.id === 'billing_account' ||
+      step.id === 'rate_card' ||
+      step.id === 'billing_linked') &&
     !step.complete &&
-    typeof onReviewRoles === 'function' &&
-    organization.identityProviderConnected
+    typeof onReviewBilling === 'function'
+  const canReviewIdp =
+    step.id === 'idp' &&
+    !step.complete &&
+    typeof onReviewIdentityProvider === 'function' &&
+    isTenantReadyForProvisioning(organization)
 
   return (
     <li
@@ -190,6 +207,16 @@ function ActivationStepRow({
         )}
       </span>
       <div className="provider-admin-organizations__status-step-content">
+        {canReviewBilling ? (
+          <Button
+            variant="link"
+            isInline
+            className="provider-admin-organizations__status-step-link"
+            onClick={() => onReviewBilling(organization)}
+          >
+            {step.label}
+          </Button>
+        ) : null}
         {canReviewIdp ? (
           <Button
             variant="link"
@@ -200,17 +227,7 @@ function ActivationStepRow({
             {step.label}
           </Button>
         ) : null}
-        {canReviewRoles ? (
-          <Button
-            variant="link"
-            isInline
-            className="provider-admin-organizations__status-step-link"
-            onClick={() => onReviewRoles(organization)}
-          >
-            {step.label}
-          </Button>
-        ) : null}
-        {!canReviewIdp && !canReviewRoles ? (
+        {!canReviewBilling && !canReviewIdp ? (
           <span className="provider-admin-organizations__status-step-label">{step.label}</span>
         ) : null}
         <span className="pf-v6-screen-reader">
@@ -229,9 +246,9 @@ function ActivationStepRow({
             {idpConnectedByLabel}
           </Content>
         ) : null}
-        {rolesMeta ? (
+        {billingMeta ? (
           <Content component="p" className="provider-admin-organizations__status-step-meta">
-            {rolesMeta}
+            {billingMeta}
           </Content>
         ) : null}
       </div>
@@ -252,11 +269,13 @@ export function OrganizationDetailsPage({
   onBack,
   onEdit,
   onRemove,
+  onReviewBilling,
   onReviewIdentityProvider,
   onReviewRoles,
   onOrganizationChange,
 }: OrganizationDetailsPageProps) {
   const activationSteps = getOrganizationActivationSteps(organization)
+  const tenantSetupStatus = resolveTenantSetupStatus(organization)
   const roleAssignments = listRoleAssignments(organization)
   const companyLogoSrc = isHarborlineCapitalOrganization(organization)
     ? null
@@ -319,7 +338,7 @@ export function OrganizationDetailsPage({
     <EntityDetailsPageShell
       parentLabel="Tenants"
       onBack={onBack}
-      title={organization.name}
+      title={getOrganizationDisplayName(organization)}
       titleId="tenant-details-title"
       description="Tenant details for billing, identity domain, and workspace access."
       actions={
@@ -340,6 +359,14 @@ export function OrganizationDetailsPage({
                 className="entity-details-page__dl"
                 aria-label="Tenant overview"
               >
+                <DescriptionListGroup>
+                  <DescriptionListTerm>Setup status</DescriptionListTerm>
+                  <DescriptionListDescription>
+                    <Label color={getTenantSetupStatusColor(tenantSetupStatus)} isCompact>
+                      {getTenantSetupStatusLabel(tenantSetupStatus)}
+                    </Label>
+                  </DescriptionListDescription>
+                </DescriptionListGroup>
                 <DescriptionListGroup>
                   <DescriptionListTerm>Status</DescriptionListTerm>
                   <DescriptionListDescription>
@@ -393,14 +420,47 @@ export function OrganizationDetailsPage({
                   </DescriptionListDescription>
                 </DescriptionListGroup>
                 <DescriptionListGroup>
-                  <DescriptionListTerm>Billing account</DescriptionListTerm>
+                  <DescriptionListTerm>Billing configuration</DescriptionListTerm>
                   <DescriptionListDescription>
-                    <Content component="p" className="provider-admin-organizations__primary-cell">
-                      {organization.billingAccountName}
-                    </Content>
-                    <Content component="p" className="provider-admin-organizations__secondary-cell">
-                      <code>{organization.billingAccountId}</code>
-                    </Content>
+                    {getOrganizationM360AccountId(organization) ? (
+                      <>
+                        <Content component="p" className="provider-admin-organizations__secondary-cell">
+                          {organization.billingAccountName || 'M360 billing account'}
+                        </Content>
+                        <Content component="p" className="provider-admin-organizations__secondary-cell">
+                          <code>Tenant name: {getOrganizationM360AccountId(organization)}</code>
+                        </Content>
+                        {organization.m360RateCardName ? (
+                          <Content component="p" className="provider-admin-organizations__secondary-cell">
+                            Rate card: {organization.m360RateCardName}
+                          </Content>
+                        ) : (
+                          <Content component="p" className="provider-admin-organizations__secondary-cell">
+                            Rate card required
+                          </Content>
+                        )}
+                        <M360ConnectionStatusField
+                          accountId={getOrganizationM360AccountId(organization)}
+                          status={getOrganizationM360ConnectionStatus(organization)}
+                        />
+                      </>
+                    ) : (
+                      <Content component="p" className="provider-admin-organizations__secondary-cell">
+                        No M360 billing account configured.
+                        {onReviewBilling ? (
+                          <>
+                            {' '}
+                            <Button
+                              variant="link"
+                              isInline
+                              onClick={() => onReviewBilling(organization)}
+                            >
+                              Complete billing setup
+                            </Button>
+                          </>
+                        ) : null}
+                      </Content>
+                    )}
                   </DescriptionListDescription>
                 </DescriptionListGroup>
                 <DescriptionListGroup>
@@ -414,19 +474,19 @@ export function OrganizationDetailsPage({
 
             <div className="entity-details-page__column">
               <Title headingLevel="h2" size="lg" className="entity-details-page__section-title">
-                Activation status
+                Tenant setup
               </Title>
               <ol
                 className="provider-admin-organizations__status-steps"
-                aria-label="Activation progress"
+                aria-label="Tenant setup progress"
               >
                 {activationSteps.map((step) => (
                   <ActivationStepRow
                     key={step.id}
                     step={step}
                     organization={organization}
+                    onReviewBilling={onReviewBilling}
                     onReviewIdentityProvider={onReviewIdentityProvider}
-                    onReviewRoles={canAssignRoles ? () => handleAssignRoles() : undefined}
                   />
                 ))}
               </ol>

@@ -71,8 +71,10 @@ import {
   parseRateCardFromForm,
   type CatalogServiceId,
   type PublishedTemplatePayload,
-  type RateCard,
 } from '../providerSetup/templateDemo'
+import { canPublishCatalogItemToTenants, getCatalogItemM360Pricing } from '../billing/m360'
+import { M360RateMissingModal } from '../components/billing/M360RateMissingModal'
+import { M360RateStatusLabel } from '../components/billing/M360RateStatusLabel'
 import { ProviderSetupPublishCatalogWizard } from './provider-setup/ProviderSetupPublishCatalogWizard'
 
 type ProviderAdminCatalogPageProps = {
@@ -229,16 +231,26 @@ function ScopeCell({ scope }: { scope: ProviderCatalogDraft['scope'] }) {
   )
 }
 
-function ProviderAdminCatalogRateCell({ rateCard }: { rateCard: RateCard }) {
-  const hourly = rateCard.hourlyRate.toFixed(2)
-  const monthly = rateCard.monthlyRate.toLocaleString('en-US', { maximumFractionDigits: 0 })
+function ProviderAdminCatalogRateCell({
+  item,
+}: {
+  item: ProviderCatalogDraft
+}) {
+  const pricing = getCatalogItemM360Pricing(item)
+  const hourly = item.rateCard.hourlyRate.toFixed(2)
+  const monthly = item.rateCard.monthlyRate.toLocaleString('en-US', { maximumFractionDigits: 0 })
 
   return (
     <Content component="p" className="provider-admin-catalog-items__primary-cell provider-admin-catalog-items__rate-cell">
-      <span className="provider-admin-catalog-items__rate-line">
-        ${hourly}/hr · ${monthly}/mo
-      </span>
-      <span className="provider-admin-catalog-items__rate-unit">per instance</span>
+      <M360RateStatusLabel item={item} pricing={pricing} />
+      {pricing.status === 'configured' ? (
+        <>
+          <span className="provider-admin-catalog-items__rate-line">
+            ${hourly}/hr · ${monthly}/mo
+          </span>
+          <span className="provider-admin-catalog-items__rate-unit">per instance</span>
+        </>
+      ) : null}
     </Content>
   )
 }
@@ -270,6 +282,7 @@ function getCatalogItemActions(
   onDelete: () => void,
 ): IAction[] {
   const isUnpublished = getCatalogItemStatus(item) === 'unpublished'
+  const publishBlocked = isUnpublished && !canPublishCatalogItemToTenants(item)
   const actions: IAction[] = [
     {
       title: 'View details',
@@ -292,9 +305,15 @@ function getCatalogItemActions(
       isSeparator: true,
     },
     {
-      title: isPublishing ? 'Publishing ...' : isUnpublished ? 'Publish' : 'Unpublish',
+      title: isPublishing
+        ? 'Publishing ...'
+        : publishBlocked
+          ? 'Publish (rate missing)'
+          : isUnpublished
+            ? 'Publish'
+            : 'Unpublish',
       onClick: onTogglePublish,
-      isDisabled: isPublishing,
+      isDisabled: isPublishing || publishBlocked,
     },
     {
       title: 'Delete',
@@ -343,6 +362,9 @@ export function ProviderAdminCatalogPage({
   const [creatingCatalogItemId, setCreatingCatalogItemId] = useState<string | null>(null)
   const [creatingCardHeightPx, setCreatingCardHeightPx] = useState<number | null>(null)
   const [publishingCatalogItemId, setPublishingCatalogItemId] = useState<string | null>(null)
+  const [rateMissingCatalogItem, setRateMissingCatalogItem] = useState<ProviderCatalogDraft | null>(
+    null,
+  )
   const createRevealTimeoutRef = useRef<number | null>(null)
   const publishRevealTimeoutRef = useRef<number | null>(null)
   const catalogCardGridRef = useRef<HTMLDivElement | null>(null)
@@ -767,6 +789,10 @@ export function ProviderAdminCatalogPage({
 
   const openTogglePublish = (item: ProviderCatalogDraft) => {
     if (getCatalogItemStatus(item) === 'unpublished') {
+      if (!canPublishCatalogItemToTenants(item)) {
+        setRateMissingCatalogItem(item)
+        return
+      }
       publishCatalogItem(item)
       return
     }
@@ -1191,7 +1217,12 @@ export function ProviderAdminCatalogPage({
                   <dl className="provider-admin-catalog-items__card-specs">
                     <div className="provider-admin-catalog-items__card-spec">
                       <dt>Rate</dt>
-                      <dd>{formatRateCardSummary(item.rateCard)}</dd>
+                      <dd>
+                        <M360RateStatusLabel item={item} />
+                        {canPublishCatalogItemToTenants(item)
+                          ? formatRateCardSummary(item.rateCard)
+                          : null}
+                      </dd>
                     </div>
                   </dl>
                   <div
@@ -1291,7 +1322,7 @@ export function ProviderAdminCatalogPage({
                     />
                   </Td>
                   <Td dataLabel="Rate" className="provider-admin-catalog-items__col-rate">
-                    <ProviderAdminCatalogRateCell rateCard={item.rateCard} />
+                    <ProviderAdminCatalogRateCell item={item} />
                   </Td>
                   <Td dataLabel="Visibility" className="provider-admin-catalog-items__col-visibility">
                     <ScopeCell scope={item.scope} />
@@ -1311,6 +1342,16 @@ export function ProviderAdminCatalogPage({
       )}
     </div>
       )}
+
+      <M360RateMissingModal
+        item={rateMissingCatalogItem}
+        isOpen={rateMissingCatalogItem !== null}
+        onClose={() => setRateMissingCatalogItem(null)}
+        onRatesRefreshed={() => {
+          refreshCatalogItems()
+          setRateMissingCatalogItem(null)
+        }}
+      />
 
       <Modal
         variant={ModalVariant.small}

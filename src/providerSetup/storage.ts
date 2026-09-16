@@ -1538,7 +1538,95 @@ function normalizeRegisteredOrganization(org: RegisteredOrganization): Registere
     normalized.idpInviteStatus = 'expired'
   }
 
+  const tenantName = normalized.name.trim()
+  if (tenantName) {
+    normalized.tenantId = tenantName
+  }
+
   return normalized
+}
+
+const CANONICAL_DEMO_ORG_IDS = new Set([
+  DEMO_NORTH_SUMMIT_BANK_ORG_ID,
+  DEMO_HARBORLINE_CAPITAL_ORG_ID,
+  DEMO_BLUESOLACE_ORG_ID,
+])
+
+function organizationCompletenessScore(org: RegisteredOrganization): number {
+  let score = 0
+  if (CANONICAL_DEMO_ORG_IDS.has(org.id)) {
+    score += 1000
+  }
+  if (org.billingAccountLinked) {
+    score += 100
+  }
+  if (org.tenantSetupStatus === 'ready') {
+    score += 80
+  }
+  if (org.tenantSetupStatus === 'billing_configured') {
+    score += 60
+  }
+  if (org.identityProviderConnected) {
+    score += 40
+  }
+  if (org.status === 'Active') {
+    score += 20
+  }
+  return score
+}
+
+function pickPreferredRegisteredOrganization(
+  current: RegisteredOrganization,
+  candidate: RegisteredOrganization,
+): RegisteredOrganization {
+  const currentScore = organizationCompletenessScore(current)
+  const candidateScore = organizationCompletenessScore(candidate)
+  if (candidateScore !== currentScore) {
+    return candidateScore > currentScore ? candidate : current
+  }
+
+  return candidate.createdAt >= current.createdAt ? candidate : current
+}
+
+function dedupeRegisteredOrganizationsBySlug(
+  organizations: readonly RegisteredOrganization[],
+): RegisteredOrganization[] {
+  const bySlug = new Map<string, RegisteredOrganization>()
+
+  for (const organization of organizations) {
+    const slug = organization.slug.trim().toLowerCase()
+    if (!slug) {
+      continue
+    }
+
+    const existing = bySlug.get(slug)
+    bySlug.set(
+      slug,
+      existing ? pickPreferredRegisteredOrganization(existing, organization) : organization,
+    )
+  }
+
+  return Array.from(bySlug.values())
+}
+
+function pruneIncompleteOnboardingOrphans(
+  organizations: readonly RegisteredOrganization[],
+): RegisteredOrganization[] {
+  return organizations.filter((organization) => {
+    if (CANONICAL_DEMO_ORG_IDS.has(organization.id)) {
+      return true
+    }
+    if (organization.billingAccountLinked || organization.tenantSetupStatus === 'ready') {
+      return true
+    }
+    if (organization.tenantSetupStatus === 'billing_configured') {
+      return true
+    }
+    if (organization.identityProviderConnected || organization.status === 'Active') {
+      return true
+    }
+    return false
+  })
 }
 
 function isRegisteredOrganization(value: unknown): value is RegisteredOrganization {
@@ -1577,32 +1665,41 @@ export function getProviderRegisteredOrganizations(): RegisteredOrganization[] {
 
     const tenants = parsed.filter(isRegisteredOrganization)
     const normalized = tenants.map(normalizeRegisteredOrganization)
-    const needsPersist = normalized.some((tenant, index) => {
-      const original = tenants[index]!
-      return (
-        original.id !== tenant.id ||
-        original.name !== tenant.name ||
-        original.catalogItemId !== tenant.catalogItemId ||
-        original.catalogDisplayName !== tenant.catalogDisplayName ||
-        original.externalIpPoolName !== tenant.externalIpPoolName ||
-        original.billingAccountName !== tenant.billingAccountName ||
-        original.primaryDomain !== tenant.primaryDomain ||
-        original.identityProviderDisplayName !== tenant.identityProviderDisplayName ||
-        original.identityProviderIssuerUrl !== tenant.identityProviderIssuerUrl ||
-        original.identityProviderClientId !== tenant.identityProviderClientId ||
-        original.identityProviderConnectedBy !== tenant.identityProviderConnectedBy ||
-        original.tenantAdminName !== tenant.tenantAdminName ||
-        original.tenantAdminEmail !== tenant.tenantAdminEmail ||
-        original.breakGlassUsername !== tenant.breakGlassUsername ||
-        original.breakGlassPassword !== tenant.breakGlassPassword ||
-        JSON.stringify(original.additionalDomains ?? []) !==
-          JSON.stringify(tenant.additionalDomains)
-      )
-    })
+    const deduped = dedupeRegisteredOrganizationsBySlug(
+      pruneIncompleteOnboardingOrphans(normalized),
+    )
+    const needsPersist =
+      deduped.length !== tenants.length ||
+      deduped.some((tenant, index) => {
+        const original = tenants[index]
+        if (!original) {
+          return true
+        }
+        return (
+          original.id !== tenant.id ||
+          original.name !== tenant.name ||
+          original.tenantId !== tenant.tenantId ||
+          original.catalogItemId !== tenant.catalogItemId ||
+          original.catalogDisplayName !== tenant.catalogDisplayName ||
+          original.externalIpPoolName !== tenant.externalIpPoolName ||
+          original.billingAccountName !== tenant.billingAccountName ||
+          original.primaryDomain !== tenant.primaryDomain ||
+          original.identityProviderDisplayName !== tenant.identityProviderDisplayName ||
+          original.identityProviderIssuerUrl !== tenant.identityProviderIssuerUrl ||
+          original.identityProviderClientId !== tenant.identityProviderClientId ||
+          original.identityProviderConnectedBy !== tenant.identityProviderConnectedBy ||
+          original.tenantAdminName !== tenant.tenantAdminName ||
+          original.tenantAdminEmail !== tenant.tenantAdminEmail ||
+          original.breakGlassUsername !== tenant.breakGlassUsername ||
+          original.breakGlassPassword !== tenant.breakGlassPassword ||
+          JSON.stringify(original.additionalDomains ?? []) !==
+            JSON.stringify(tenant.additionalDomains)
+        )
+      })
     if (needsPersist) {
-      setProviderRegisteredOrganizations(normalized)
+      setProviderRegisteredOrganizations(deduped)
     }
-    return normalized
+    return deduped
   } catch {
     return []
   }
@@ -1896,7 +1993,26 @@ export function ensureBlueSolaceOnboardingOrganization(): RegisteredOrganization
 export function addProviderRegisteredOrganization(org: RegisteredOrganization): void {
   try {
     const current = getProviderRegisteredOrganizations()
-    writeRegisteredOrganizationsRaw(JSON.stringify([...current, org]))
+    const slug = org.slug.trim().toLowerCase()
+    const existingIndex = current.findIndex(
+      (tenant) => tenant.slug.trim().toLowerCase() === slug,
+    )
+    if (existingIndex >= 0) {
+      const existing = current[existingIndex]!
+      const updated = normalizeRegisteredOrganization({
+        ...existing,
+        ...org,
+        id: existing.id,
+      })
+      setProviderRegisteredOrganizations(
+        current.map((tenant, index) => (index === existingIndex ? updated : tenant)),
+      )
+      return
+    }
+
+    writeRegisteredOrganizationsRaw(
+      JSON.stringify([...current, normalizeRegisteredOrganization(org)]),
+    )
   } catch {
     /* demo storage unavailable */
   }
