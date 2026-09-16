@@ -15,7 +15,6 @@ import {
 } from '@patternfly/react-core'
 import { css } from '@patternfly/react-styles'
 import alignmentStyles from '@patternfly/react-styles/css/utilities/Alignment/alignment'
-import { CogIcon } from '@patternfly/react-icons/dist/esm/icons/cog-icon'
 import { CrownIcon } from '@patternfly/react-icons/dist/esm/icons/crown-icon'
 import { UserIcon } from '@patternfly/react-icons/dist/esm/icons/user-icon'
 import { UsersIcon } from '@patternfly/react-icons/dist/esm/icons/users-icon'
@@ -66,8 +65,8 @@ function RoleBlock({ id, title, description, icon, actions, prototypeLinks = [] 
         </Content>
         {actions}
       </div>
-      <FlexItem>
-        {prototypeLinks.length > 0 ? (
+      {prototypeLinks.length > 0 ? (
+        <FlexItem>
           <Stack hasGutter>
             {prototypeLinks.map((link) => (
               <StackItem key={`${link.label}-${link.to}`}>
@@ -98,10 +97,8 @@ function RoleBlock({ id, title, description, icon, actions, prototypeLinks = [] 
               </StackItem>
             ))}
           </Stack>
-        ) : (
-          <Content component="p">Prototype versions coming soon</Content>
-        )}
-      </FlexItem>
+        </FlexItem>
+      ) : null}
     </Flex>
   )
 }
@@ -133,10 +130,6 @@ function SingleEnterActions({
 export function BmaasLandingPage() {
   const providerPrototypeLinks: PrototypeLink[] = [
     {
-      label: 'Catalog',
-      to: '/provider/workspace?nav=catalog',
-    },
-    {
       label: 'Tenants',
       to: '/provider/workspace?nav=administration-organizations',
       companionSeparator: ', ',
@@ -146,10 +139,6 @@ export function BmaasLandingPage() {
       },
     },
     {
-      label: 'External IP Pools',
-      to: '/provider/workspace?nav=networking',
-    },
-    {
       label: 'M360 billing account',
       to: '/m360/accounts',
     },
@@ -157,18 +146,9 @@ export function BmaasLandingPage() {
 
   const roles: RoleBlockProps[] = [
     {
-      id: 'bmaas-landing-role-infra-admin-title',
-      title: 'Infra Admin',
-      description: 'Bootstrap the environment, manage bare metal, and make Red Hat cloud-ready.',
-      icon: <CogIcon />,
-      actions: (
-        <SingleEnterActions disabled ariaLabel="Infra Admin — not available in this demo" />
-      ),
-    },
-    {
       id: 'bmaas-landing-role-provider-title',
       title: 'Provider Admin',
-      description: 'Manage platform services, tenants, and global policies for the OSAC environment.',
+      description: 'Register tenants, link M360 billing accounts, and assign rate cards.',
       icon: <CrownIcon />,
       actions: <SingleEnterActions to="/provider" ariaLabel="Enter Provider Admin demo" />,
       prototypeLinks: providerPrototypeLinks,
@@ -176,62 +156,20 @@ export function BmaasLandingPage() {
     {
       id: 'bmaas-landing-role-tenant-admin-title',
       title: 'Tenant Admin',
-      description: 'Configure tenant resources, users, quotas, and shared services.',
+      description: 'Manage tenant billing, cost allocation, and usage for your organization.',
       icon: <UserIcon />,
       actions: (
         <SingleEnterActions to="/tenant-admin/northsummit" ariaLabel="Enter Tenant Admin demo" />
       ),
-      prototypeLinks: [
-        {
-          label: 'Catalog',
-          to: '/tenant-admin/northsummit/workspace?nav=catalog',
-        },
-        {
-          label: 'Projects',
-          to: '/tenant-admin/northsummit/workspace?nav=projects-teams',
-        },
-        {
-          label: 'Virtual networks',
-          to: '/tenant-admin/northsummit/workspace?nav=networking-virtual-networks',
-          companionSeparator: ', ',
-          companionLink: {
-            label: 'External IPs',
-            to: '/tenant-admin/northsummit/workspace?nav=networking-external-ip-pools',
-          },
-        },
-      ],
     },
     {
       id: 'bmaas-landing-role-tenant-user-title',
       title: 'Tenant User',
-      description: 'Provision and manage Bare Metal, Cluster, VM, and Models workloads.',
+      description: 'Launch workloads with cost estimates and view billing-related usage.',
       icon: <UsersIcon />,
       actions: (
         <SingleEnterActions to="/tenant-user/northsummit" ariaLabel="Enter Tenant User demo" />
       ),
-      prototypeLinks: [
-        {
-          label: 'Catalog',
-          to: '/tenant-user/northsummit/workspace?nav=catalog',
-        },
-        {
-          label: 'Projects',
-          to: '/tenant-user/northsummit/workspace?nav=projects-teams',
-        },
-        {
-          label: 'Virtual networks',
-          to: '/tenant-user/northsummit/workspace?nav=networking-virtual-networks',
-          companionSeparator: ', ',
-          companionLink: {
-            label: 'External IPs',
-            to: '/tenant-user/northsummit/workspace?nav=networking-external-ip-pools',
-          },
-        },
-        {
-          label: 'Launch (cost estimate)',
-          to: '/tenant-user/northsummit/workspace?nav=catalog&item=bare-metal-gpu-training-server',
-        },
-      ],
     },
   ]
 
@@ -254,13 +192,13 @@ export function BmaasLandingPage() {
           >
             <Brand src={redHatHatLogoUrl} alt="Red Hat" heights={{ default: '52px' }} />
             <Title headingLevel="h1" size="4xl">
-              Red Hat OSAC Prototypes 0.3
+              Red Hat OSAC Billing Prototypes 0.3
             </Title>
             <Content component="p">Select a role to access the customized interface.</Content>
           </Flex>
         </FlexItem>
 
-        <FlexItem alignSelf={{ default: 'alignSelfStretch' }}>
+        <FlexItem className="bmaas-role-landing__roles">
           <Card component="article">
             <CardBody>
               <Flex
@@ -296,16 +234,36 @@ export function BmaasLandingPage() {
             gap={{ default: 'gapMd' }}
             className={css(alignmentStyles.textAlignCenter)}
           >
-            <Button
-              variant="link"
-              component="a"
-              isInline
-              href="https://docs.google.com/spreadsheets/d/1Gw4zbnim9oCjHkvqREvoNyViHgLd4JBZcBmtaFrO0xE/edit?gid=1297446303#gid=1297446303"
-              target="_blank"
-              rel="noopener noreferrer"
+            <Flex
+              gap={{ default: 'gapSm' }}
+              alignItems={{ default: 'alignItemsCenter' }}
+              justifyContent={{ default: 'justifyContentCenter' }}
+              flexWrap={{ default: 'wrap' }}
             >
-              OSAC Delivery Overview
-            </Button>
+              <span className="bmaas-role-landing__prototype-link-prefix">
+                <Button
+                  variant="link"
+                  component="a"
+                  isInline
+                  href="https://redhat.atlassian.net/browse/OSAC-3788"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  OSAC-3788
+                </Button>
+                <span aria-hidden>,</span>
+              </span>
+              <Button
+                variant="link"
+                component="a"
+                isInline
+                href="https://redhat.atlassian.net/browse/OSAC-3877"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                OSAC-3877
+              </Button>
+            </Flex>
             <div className="bmaas-role-landing__credits">
               <Content component="p">
                 Created by{' '}

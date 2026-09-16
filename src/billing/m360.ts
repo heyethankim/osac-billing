@@ -136,14 +136,14 @@ export function getCatalogItemM360Pricing(
     return {
       status: 'missing',
       hourlyRate: null,
-      label: 'Unconfigured / Rate missing',
+      label: 'Rate missing',
     }
   }
 
   return {
     status: 'configured',
     hourlyRate: rateCard.hourlyRate,
-    label: `Configured: $${rateCard.hourlyRate.toFixed(2)}/hr`,
+    label: `$${rateCard.hourlyRate.toFixed(2)}/hr`,
   }
 }
 

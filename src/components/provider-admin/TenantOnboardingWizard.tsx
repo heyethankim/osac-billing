@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { ExclamationTriangleIcon } from '@patternfly/react-icons/dist/esm/icons/exclamation-triangle-icon'
 import { ExternalLinkAltIcon } from '@patternfly/react-icons/dist/esm/icons/external-link-alt-icon'
 import { InfoCircleIcon } from '@patternfly/react-icons/dist/esm/icons/info-circle-icon'
-import { SyncIcon } from '@patternfly/react-icons/dist/esm/icons/sync-icon'
+import { RedoIcon } from '@patternfly/react-icons/dist/esm/icons/redo-icon'
 import {
   Alert,
   Button,
@@ -229,6 +229,29 @@ export function TenantOnboardingWizard({
           createdOrganization?.slug || resumeOrganization?.slug || draftOrganizationSlug,
         )
       : false
+
+  const sortedBillingAccounts = useMemo(() => {
+    const currentTenantSlug =
+      createdOrganization?.slug || resumeOrganization?.slug || draftOrganizationSlug
+
+    return [...billingAccounts].sort((left, right) => {
+      const leftLinkedElsewhere = isM360AccountLinkedToAnotherTenant(left, currentTenantSlug)
+      const rightLinkedElsewhere = isM360AccountLinkedToAnotherTenant(right, currentTenantSlug)
+
+      if (leftLinkedElsewhere !== rightLinkedElsewhere) {
+        return leftLinkedElsewhere ? 1 : -1
+      }
+
+      return getM360AccountTenantName(left).localeCompare(getM360AccountTenantName(right), undefined, {
+        sensitivity: 'base',
+      })
+    })
+  }, [
+    billingAccounts,
+    createdOrganization?.slug,
+    draftOrganizationSlug,
+    resumeOrganization?.slug,
+  ])
 
   const getDefaultBillingSelections = (organization: RegisteredOrganization | null) => {
     const isBluesolaceResume =
@@ -606,7 +629,7 @@ export function TenantOnboardingWizard({
   }
 
   function renderBillingAccountStep() {
-    const useThreeColumnAccountGrid = billingAccounts.length >= 3
+    const useThreeColumnAccountGrid = sortedBillingAccounts.length >= 3
 
     return (
       <div className="provider-admin-organizations__wizard-step tenant-onboarding__step tenant-onboarding__billing-step">
@@ -674,6 +697,7 @@ export function TenantOnboardingWizard({
               <EmptyStateActions>
                 <Button
                   variant="primary"
+                  icon={<ExternalLinkAltIcon aria-hidden />}
                   component="a"
                   href={M360_ACCOUNTS_PATH}
                   target="_blank"
@@ -681,7 +705,7 @@ export function TenantOnboardingWizard({
                 >
                   Create billing account in M360
                 </Button>
-                <Button variant="link" icon={<SyncIcon aria-hidden />} onClick={retryFetchAccounts}>
+                <Button variant="link" icon={<RedoIcon aria-hidden />} onClick={retryFetchAccounts}>
                   Refresh
                 </Button>
               </EmptyStateActions>
@@ -702,7 +726,7 @@ export function TenantOnboardingWizard({
                 role="radiogroup"
                 aria-label="M360 billing account"
               >
-                {billingAccounts.map((account) => {
+                {sortedBillingAccounts.map((account) => {
                   const tenantName = getM360AccountTenantName(account)
                   const isSelected = selectedAccountName === tenantName
                   const titleId = `tenant-onboarding-account-${tenantName}-name`
@@ -803,7 +827,7 @@ export function TenantOnboardingWizard({
                   <Button
                     variant="link"
                     isInline
-                    icon={<SyncIcon aria-hidden />}
+                    icon={<RedoIcon aria-hidden />}
                     onClick={retryFetchAccounts}
                   >
                     Refresh list

@@ -64,6 +64,12 @@ select.pf-v6-c-form-control {
   width: min(92rem, 100%);
 }
 
+/* Three roles — keep each column the same width as the original four-up layout (92rem ÷ 4 × 3). */
+.bmaas-role-landing__roles {
+  width: min(69rem, 100%);
+  align-self: center;
+}
+
 .bmaas-role-landing__cta {
   display: flex;
   flex-direction: column;
@@ -200,7 +206,15 @@ select.pf-v6-c-form-control {
 }
 
 .billing-m360-rate-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--xs);
   margin-block-end: var(--pf-t--global--spacer--xs);
+  color: var(--pf-t--global--text--color--subtle);
+}
+
+.billing-m360-rate-status--missing {
+  color: var(--pf-t--global--text--color--status--warning--default);
 }
 
 .billing-launch-cost-panel {

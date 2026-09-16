@@ -1,10 +1,10 @@
-# OSAC BMaaS Prototype
+# OSAC Billing Prototype
 
-PatternFly React prototype for Bare Metal-as-a-Service flows:
+PatternFly React prototype for OSAC billing and M360 integration:
 
-- **Provider admin** — catalog, BMaaS templates, external IP pools, organizations
-- **Tenant admin** — catalog manager, projects
-- **Tenant user** — catalog, launch instance, my instances
+- **M360 portal** — billing accounts
+- **Provider admin** — register tenant, billing account and rate card assignment
+- **OSAC surfaces** — catalog publish gates, launch cost, billing & metering
 
 ## Local development
 
@@ -19,13 +19,15 @@ Open the URL shown in the terminal (default `http://127.0.0.1:5184/`).
 
 After deployment is enabled, the demo is published at:
 
-**https://heyethankim.github.io/osac-bmaas/**
+**https://heyethankim.github.io/osac-billing/**
 
-Pushes to `main` rebuild and redeploy automatically.
+Pushes to `main` rebuild and redeploy automatically via GitHub Actions.
 
 ### First-time GitHub Pages setup
 
-1. Open the repo on GitHub → **Settings** → **Pages**
+1. Open [osac-billing Settings → Pages](https://github.com/heyethankim/osac-billing/settings/pages)
 2. Under **Build and deployment**, set **Source** to **GitHub Actions**
-3. Push to `main` (or run the **Deploy to GitHub Pages** workflow manually)
-4. When the workflow finishes, open the live URL above
+3. Run **Actions** → **Deploy to GitHub Pages** → **Re-run all jobs**
+4. When the workflow succeeds, open the live URL above (may take 1–2 minutes)
+
+If **GitHub Actions** is unavailable, use **Deploy from a branch** → branch **`gh-pages`** → folder **`/ (root)`**, then save.
