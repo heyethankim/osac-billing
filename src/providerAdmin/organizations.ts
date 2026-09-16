@@ -1,5 +1,10 @@
 import type { M360ConnectionStatus } from '../billing/m360'
 import {
+  findM360AccountByReference,
+  findM360AccountByTenantName,
+  listM360PortalAccounts,
+} from '../billing/m360Accounts'
+import {
   DEMO_TENANT_DISPLAY_ADMIN,
   DEMO_TENANT_LOGIN_EMAIL_ADMIN,
   DEMO_TENANT_LOGIN_EMAIL_USER,
@@ -215,6 +220,37 @@ export function isTenantReadyForProvisioning(organization: RegisteredOrganizatio
 export function isTenantBillingConfigured(organization: RegisteredOrganization): boolean {
   const status = resolveTenantSetupStatus(organization)
   return status === 'billing_configured' || status === 'ready'
+}
+
+export function isOrganizationBillingPending(organization: RegisteredOrganization): boolean {
+  return !isTenantBillingConfigured(organization)
+}
+
+export function getOrganizationBillingPendingTooltip(
+  organization: RegisteredOrganization,
+): string {
+  const accounts = listM360PortalAccounts()
+  const account =
+    findM360AccountByTenantName(organization.name, accounts) ??
+    findM360AccountByReference(organization.m360AccountId ?? '', accounts) ??
+    findM360AccountByTenantName(organization.tenantId, accounts)
+
+  if (account?.accountStatus === 'Inactive') {
+    return 'Billing not linked. M360 account is inactive.'
+  }
+
+  return 'Finish tenant billing setup to publish.'
+}
+
+export function getOrganizationBillingAccountDisplay(
+  organization: RegisteredOrganization,
+): string {
+  const reference =
+    organization.m360AccountId?.trim() ||
+    organization.billingAccountId.trim() ||
+    organization.billingAccountName.trim()
+
+  return reference || '—'
 }
 
 export function generateIdpInviteToken(): string {
@@ -735,7 +771,7 @@ export function resolveIdpManagerPrototypeOrganization(
 export function getOrganizationSetupSignal(organization: RegisteredOrganization): string | null {
   const setupStatus = resolveTenantSetupStatus(organization)
   if (setupStatus === 'incomplete') {
-    return 'Billing setup required'
+    return 'Billing pending'
   }
   if (setupStatus === 'billing_configured') {
     return 'Billing account not linked'
@@ -826,59 +862,169 @@ export type OrganizationActivationStepId =
   | 'tenant_created'
   | 'billing_account'
   | 'rate_card'
-  | 'billing_linked'
   | 'idp'
+
+export type OrganizationActivationStepStatus =
+  | 'complete'
+  | 'current'
+  | 'pending'
+  | 'problematic'
 
 export type OrganizationActivationStep = {
   id: OrganizationActivationStepId
   label: string
   complete: boolean
+  status: OrganizationActivationStepStatus
+  description: string | null
 }
 
-/** Compact tenant setup checklist for the organization details rail. */
+function resolveOrganizationSetupM360Account(
+  organization: RegisteredOrganization,
+) {
+  const accounts = listM360PortalAccounts()
+  const linkedReference =
+    organization.m360AccountId?.trim() || organization.billingAccountId.trim() || ''
+
+  return (
+    (linkedReference ? findM360AccountByReference(linkedReference, accounts) : null) ??
+    findM360AccountByTenantName(organization.name, accounts) ??
+    findM360AccountByTenantName(organization.tenantId, accounts)
+  )
+}
+
+function isOrganizationSetupM360AccountInactive(
+  organization: RegisteredOrganization,
+): boolean {
+  return resolveOrganizationSetupM360Account(organization)?.accountStatus === 'Inactive'
+}
+
+function formatOrganizationSetupTimestamp(iso: string): string {
+  return new Date(iso).toLocaleString([], {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    second: '2-digit',
+  })
+}
+
+function getOrganizationBillingAccountStepDescription(
+  organization: RegisteredOrganization,
+): string {
+  const accountId =
+    organization.m360AccountId?.trim() || organization.billingAccountId.trim()
+  if (!accountId) {
+    return 'Not configured'
+  }
+
+  const accountLabel =
+    organization.billingAccountName?.trim() ||
+    resolveOrganizationSetupM360Account(organization)?.accountName?.trim() ||
+    accountId
+
+  if (isOrganizationSetupM360AccountInactive(organization)) {
+    return `${accountLabel} · Billing account inactive`
+  }
+
+  return accountLabel
+}
+
+function getOrganizationRateCardStepDescription(organization: RegisteredOrganization): string {
+  if (organization.m360RateCardName?.trim()) {
+    return organization.m360RateCardName.trim()
+  }
+
+  if (isOrganizationSetupM360AccountInactive(organization)) {
+    return 'Not configured · Requires active billing account'
+  }
+
+  return 'Not configured'
+}
+
+function getOrganizationIdentityProviderStepDescription(
+  organization: RegisteredOrganization,
+): string | null {
+  if (!organization.identityProviderConnected) {
+    if (hasPendingIdpInvite(organization)) {
+      return organization.idpManagerEmail
+        ? `Invite sent to ${organization.idpManagerEmail}`
+        : 'Waiting on IdP manager'
+    }
+
+    return 'Not configured'
+  }
+
+  const parts = [
+    organization.identityProviderProtocol,
+    organization.identityProviderDisplayName || organization.identityProviderName,
+  ].filter(Boolean)
+
+  return parts.length > 0 ? parts.join(' · ') : organization.identityProviderName
+}
+
+/** Vertical tenant setup timeline for the organization details page. */
 export function getOrganizationActivationSteps(
   organization: RegisteredOrganization,
 ): OrganizationActivationStep[] {
   const m360AccountId =
     organization.m360AccountId?.trim() || organization.billingAccountId.trim()
-  const billingAccountComplete = Boolean(m360AccountId)
+  const billingAccountInactive = isOrganizationSetupM360AccountInactive(organization)
+  const billingAccountComplete = Boolean(m360AccountId) && !billingAccountInactive
+  const billingAccountProblematic = Boolean(m360AccountId) && billingAccountInactive
   const rateCardComplete = Boolean(organization.m360RateCardId?.trim())
-  const billingLinked =
-    organization.billingAccountLinked === true ||
-    organization.m360ConnectionStatus === 'connected'
+  const rateCardProblematic = !rateCardComplete && billingAccountProblematic
   const idpComplete = organization.identityProviderConnected
 
-  return [
+  const steps: Array<
+    Omit<OrganizationActivationStep, 'status'> & { problematic?: boolean }
+  > = [
     {
       id: 'tenant_created',
       label: 'Tenant created',
       complete: true,
+      description: formatOrganizationSetupTimestamp(organization.createdAt),
     },
     {
       id: 'billing_account',
-      label: billingAccountComplete ? 'M360 billing account' : 'M360 billing account — Required',
+      label: 'M360 billing account',
       complete: billingAccountComplete,
+      problematic: billingAccountProblematic,
+      description: getOrganizationBillingAccountStepDescription(organization),
     },
     {
       id: 'rate_card',
-      label: rateCardComplete ? 'Rate card' : 'Rate card — Required',
+      label: 'Rate card',
       complete: rateCardComplete,
-    },
-    {
-      id: 'billing_linked',
-      label: billingLinked ? 'Billing account linked' : 'Billing account linked — Required',
-      complete: billingLinked,
+      problematic: rateCardProblematic,
+      description: getOrganizationRateCardStepDescription(organization),
     },
     {
       id: 'idp',
-      label: idpComplete
-        ? 'Identity provider'
-        : hasPendingIdpInvite(organization)
-          ? 'Identity provider — Waiting on IdP Manager'
-          : 'Identity provider — Not configured',
+      label: 'Identity provider',
       complete: idpComplete,
+      description: getOrganizationIdentityProviderStepDescription(organization),
     },
   ]
+
+  const firstIncompleteIndex = steps.findIndex(
+    (step) => !step.complete && !step.problematic,
+  )
+
+  return steps.map((step, index) => ({
+    id: step.id,
+    label: step.label,
+    complete: step.complete,
+    description: step.description,
+    status:
+      step.complete
+        ? 'complete'
+        : step.problematic
+          ? 'problematic'
+          : index === firstIncompleteIndex
+            ? 'current'
+            : 'pending',
+  }))
 }
 
 export function buildDemoIdentityProviderName(
@@ -907,6 +1053,13 @@ export const DEMO_HARBORLINE_CAPITAL_NAME = 'harborline-capital'
 export const DEMO_HARBORLINE_CAPITAL_TENANT_ID = DEMO_HARBORLINE_CAPITAL_NAME
 export const DEMO_HARBORLINE_CAPITAL_SLUG = 'harborline'
 export const DEMO_HARBORLINE_CAPITAL_DOMAIN = 'harborlinecapital.com'
+
+/** Pending enterprise with a VIP catalog item but incomplete billing onboarding. */
+export const DEMO_CEDAR_RIDGE_CREDIT_ORG_ID = 'org-cedar-ridge-credit'
+export const DEMO_CEDAR_RIDGE_CREDIT_NAME = 'cedar-ridge-credit'
+export const DEMO_CEDAR_RIDGE_CREDIT_TENANT_ID = DEMO_CEDAR_RIDGE_CREDIT_NAME
+export const DEMO_CEDAR_RIDGE_CREDIT_SLUG = 'cedar-ridge-credit'
+export const DEMO_CEDAR_RIDGE_CREDIT_DOMAIN = 'cedarridgecredit.com'
 
 export const REGISTER_ORGANIZATION_STEPS = [
   { id: 'organization', label: 'Tenant' },
@@ -1196,6 +1349,74 @@ export function createDemoHarborlineCapitalOrganization(
     rbacConfigured: true,
     status: 'Active',
     createdAt: '2026-06-18T11:00:00.000Z',
+  }
+}
+
+/** Cedar Ridge Credit — VIP catalog assigned; inactive M360 billing; IdP connected. */
+export function createDemoCedarRidgeCreditOrganization(
+  options: {
+    catalogItemId?: string | null
+    catalogDisplayName?: string | null
+  } = {},
+): RegisteredOrganization {
+  const primaryDomain = DEMO_CEDAR_RIDGE_CREDIT_DOMAIN
+
+  return {
+    id: DEMO_CEDAR_RIDGE_CREDIT_ORG_ID,
+    name: DEMO_CEDAR_RIDGE_CREDIT_NAME,
+    tenantId: DEMO_CEDAR_RIDGE_CREDIT_TENANT_ID,
+    slug: DEMO_CEDAR_RIDGE_CREDIT_SLUG,
+    primaryDomain,
+    additionalDomains: [],
+    displayName: DEMO_CEDAR_RIDGE_CREDIT_NAME,
+    m360AccountId: 'cedar-ridge-credit',
+    m360ConnectionStatus: 'pending',
+    billingAccountId: '',
+    billingAccountName: 'cedar-ridge-credit',
+    tenantSetupStatus: 'incomplete',
+    billingAccountLinked: false,
+    logoSrc: null,
+    logoFileName: null,
+    catalogItemId: options.catalogItemId ?? null,
+    catalogDisplayName: options.catalogDisplayName ?? null,
+    externalIpPoolId: null,
+    externalIpPoolName: null,
+    externalIpPoolCidr: null,
+    maxInstances: 12,
+    tenantAdminName: '',
+    tenantAdminEmail: '',
+    additionalTenantAdmins: [],
+    invitedTenantUserEmails: [],
+    identityProviderConnected: true,
+    identityProviderConnectedBy: 'provider-admin',
+    identityProviderName: buildDemoIdentityProviderName('OIDC', primaryDomain),
+    identityProviderDisplayName: 'cedar-ridge-credit-idp',
+    identityProviderProtocol: 'OIDC',
+    identityProviderIssuerUrl: `https://login.${primaryDomain}/oauth2`,
+    identityProviderClientId: 'cedar-ridge-credit',
+    identityProviders: [
+      {
+        id: 'idp-cedar-ridge-primary',
+        name: buildDemoIdentityProviderName('OIDC', primaryDomain),
+        displayName: 'cedar-ridge-credit-idp',
+        protocol: 'OIDC',
+        issuerUrl: `https://login.${primaryDomain}/oauth2`,
+        clientId: 'cedar-ridge-credit',
+      },
+    ],
+    idpManagerEmail: null,
+    idpInviteToken: null,
+    idpInviteStatus: 'none',
+    idpInviteSentAt: null,
+    idpInviteExpiresAt: null,
+    breakGlassName: 'IdP manager',
+    breakGlassEmail: `idp-admin@${primaryDomain}`,
+    breakGlassUsername: generateBreakGlassUsername(DEMO_CEDAR_RIDGE_CREDIT_SLUG),
+    breakGlassPassword: getDemoBreakGlassPassword(DEMO_CEDAR_RIDGE_CREDIT_SLUG),
+    breakGlassIssuedAt: new Date().toISOString(),
+    rbacConfigured: false,
+    status: 'Pending activation',
+    createdAt: new Date().toISOString(),
   }
 }
 

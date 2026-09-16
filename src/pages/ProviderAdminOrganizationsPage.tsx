@@ -32,7 +32,6 @@ import {
   sortItemsByCreatedAtDesc,
   useResourceCreateReveal,
 } from '../catalog/resourceCreateReveal'
-import { CatalogSpecRowsList } from '../components/catalog/CatalogSpecRowsList'
 import { ViewModeToggle } from '../components/catalog/CatalogViewToggle'
 import { getAdministrationViewMode, setAdministrationViewMode, type ViewMode } from '../catalog/viewMode'
 import { OrganizationDetailsPage } from '../components/provider-admin/OrganizationDetailsPage'
@@ -43,11 +42,16 @@ import { SetupIdentityProviderWizard } from '../components/provider-admin/SetupI
 import { AddTenantAdministratorWizard } from '../components/tenant-admin/AddTenantAdministratorWizard'
 import { IdpManagerIdentityProviderPage } from './idp-manager/IdpManagerIdentityProviderPage'
 import { IDP_MANAGER_ROLES_COPY } from '../idpManager/constants'
+import { BillingPendingLabel } from '../components/billing/BillingPendingLabel'
+import { isOrganizationM360AccountInactive } from '../billing/m360'
 import {
+  getOrganizationBillingAccountDisplay,
+  getOrganizationBillingPendingTooltip,
   getOrganizationSetupNextAction,
   getOrganizationSetupSignal,
   buildOrganizationFilterParts,
   getOrganizationNameInitial,
+  isOrganizationBillingPending,
   matchesOrganizationSetupFilter,
   ORGANIZATION_SETUP_FILTER_OPTIONS,
   organizationMatchesSearch,
@@ -116,6 +120,17 @@ function getOrganizationActions(
       onClick: () => onRemove(organization),
     },
   ]
+}
+
+function renderOrganizationBillingPendingLabel(organization: RegisteredOrganization) {
+  const inactive = isOrganizationM360AccountInactive(organization)
+
+  return (
+    <BillingPendingLabel
+      label={inactive ? 'Billing account inactive' : 'Billing pending'}
+      tooltip={getOrganizationBillingPendingTooltip(organization)}
+    />
+  )
 }
 
 export function ProviderAdminOrganizationsPage({
@@ -243,7 +258,7 @@ export function ProviderAdminOrganizationsPage({
   }, [organizations, searchParams])
 
   const refreshOrganizations = (nextSelectedId?: string | null) => {
-    const next = getProviderRegisteredOrganizations()
+    const next = ensureProviderDemoOrganizations()
     setOrganizations(next)
 
     setIdpDirectoryOrganization((current) => {
@@ -786,20 +801,32 @@ export function ProviderAdminOrganizationsPage({
                           {org.name}
                         </Button>
                       </Content>
-                      <CatalogSpecRowsList
-                        rows={[
-                          { label: 'Domain', value: org.primaryDomain || '—' },
-                          {
-                            label: 'Billing',
-                            value: org.billingAccountId,
-                          },
-                          { label: 'Registered', value: formatRegisteredAt(org.createdAt) },
-                        ]}
+                      <dl
                         className="provider-admin-catalog-items__specs-list provider-admin-organizations__card-specs"
-                        rowClassName="provider-admin-catalog-items__spec-row"
-                        labelClassName="provider-admin-catalog-items__spec-label"
-                        valueClassName="provider-admin-catalog-items__spec-value"
-                      />
+                      >
+                        <div className="provider-admin-catalog-items__spec-row">
+                          <dt className="provider-admin-catalog-items__spec-label">Domain</dt>
+                          <dd className="provider-admin-catalog-items__spec-value">
+                            {org.primaryDomain || '—'}
+                          </dd>
+                        </div>
+                        <div className="provider-admin-catalog-items__spec-row">
+                          <dt className="provider-admin-catalog-items__spec-label">Billing</dt>
+                          <dd className="provider-admin-catalog-items__spec-value">
+                            {isOrganizationBillingPending(org) ? (
+                              renderOrganizationBillingPendingLabel(org)
+                            ) : (
+                              getOrganizationBillingAccountDisplay(org)
+                            )}
+                          </dd>
+                        </div>
+                        <div className="provider-admin-catalog-items__spec-row">
+                          <dt className="provider-admin-catalog-items__spec-label">Registered</dt>
+                          <dd className="provider-admin-catalog-items__spec-value">
+                            {formatRegisteredAt(org.createdAt)}
+                          </dd>
+                        </div>
+                      </dl>
                       </div>
                       {setupSignal ? (
                         <div
@@ -938,12 +965,18 @@ export function ProviderAdminOrganizationsPage({
                       </Content>
                     </Td>
                     <Td modifier="wrap" dataLabel="Billing account">
-                      <Content component="p" className="provider-admin-organizations__primary-cell">
-                        {org.billingAccountName}
-                      </Content>
-                      <Content component="p" className="provider-admin-organizations__secondary-cell">
-                        <code>{org.billingAccountId}</code>
-                      </Content>
+                      {isOrganizationBillingPending(org) ? (
+                        renderOrganizationBillingPendingLabel(org)
+                      ) : (
+                        <>
+                          <Content component="p" className="provider-admin-organizations__primary-cell">
+                            {org.billingAccountName}
+                          </Content>
+                          <Content component="p" className="provider-admin-organizations__secondary-cell">
+                            <code>{getOrganizationBillingAccountDisplay(org)}</code>
+                          </Content>
+                        </>
+                      )}
                     </Td>
                     <Td modifier="wrap" dataLabel="Registered">
                       {formatRegisteredAt(org.createdAt)}

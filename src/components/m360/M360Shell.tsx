@@ -32,7 +32,7 @@ import { OutlinedBellIcon } from '@patternfly/react-icons/dist/esm/icons/outline
 import { OutlinedQuestionCircleIcon } from '@patternfly/react-icons/dist/esm/icons/outlined-question-circle-icon'
 import { UserIcon } from '@patternfly/react-icons/dist/esm/icons/user-icon'
 import { useState, type ReactNode } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useMatch, useNavigate } from 'react-router-dom'
 import redHatHatLogoUrl from '../../assets/Logo-RedHat-Hat-Color-RGB.svg?url'
 import { useThemePreferences } from '../../theme/themePreferences'
 import { UserPreferencesModal } from '../shared/UserPreferencesModal'
@@ -65,6 +65,7 @@ type M360ShellProps = {
 
 export function M360Shell({ title, children }: M360ShellProps) {
   const navigate = useNavigate()
+  const isAccountsListActive = useMatch('/m360/accounts') !== null
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false)
   const [isPreferencesModalOpen, setIsPreferencesModalOpen] = useState(false)
   const { colorSchemePreference, setColorSchemePreference } = useThemePreferences()
@@ -187,10 +188,18 @@ export function M360Shell({ title, children }: M360ShellProps) {
                 <NavItem
                   key={item}
                   itemId={item}
-                  isActive={item === 'Accounts'}
+                  isActive={item === 'Accounts' && isAccountsListActive}
                   disabled={item !== 'Accounts'}
                   to={item === 'Accounts' ? '/m360/accounts' : '#'}
                   component={item === 'Accounts' ? Link : undefined}
+                  onClick={
+                    item === 'Accounts'
+                      ? (event) => {
+                          event.preventDefault()
+                          navigate('/m360/accounts')
+                        }
+                      : undefined
+                  }
                 >
                   {item}
                 </NavItem>

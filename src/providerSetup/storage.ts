@@ -3,9 +3,11 @@ import type { ProviderAdminNavId } from '../providerAdmin/constants'
 import { resolveProviderAdminNavId } from '../providerAdmin/constants'
 import {
   createDemoBlueSolaceOnboardingOrganization,
+  createDemoCedarRidgeCreditOrganization,
   createDemoHarborlineCapitalOrganization,
   createDemoNorthSummitBankOrganization,
   DEMO_BLUESOLACE_ORG_ID,
+  DEMO_CEDAR_RIDGE_CREDIT_ORG_ID,
   DEMO_HARBORLINE_CAPITAL_ORG_ID,
   DEMO_HARBORLINE_CAPITAL_SLUG,
   DEMO_IDP_MANAGER_ORG_SLUG,
@@ -178,8 +180,8 @@ export function getProviderActiveNav(): ProviderAdminNavId {
       value === 'networking-external-ip-pools' ||
       value === 'secrets' ||
       value === 'administration-organizations' ||
-      value === 'administration-quotas' ||
-      value === 'billing-metering' ||
+      value === 'administration-billing' ||
+      value === 'administration-rate-cards' ||
       value === 'system'
     ) {
       return resolveProviderAdminNavId(value)
@@ -215,8 +217,12 @@ export function getProviderActiveNav(): ProviderAdminNavId {
       return resolveProviderAdminNavId('networking-external-ip-pools')
     }
 
-    if (value === 'administration-organizations-quotas') {
-      return 'administration-quotas'
+    if (value === 'administration-quotas' || value === 'administration-organizations-quotas') {
+      return 'administration-billing'
+    }
+
+    if (value === 'billing-metering') {
+      return 'administration-rate-cards'
     }
 
     if (value === 'administration' || value === 'access-security') {
@@ -1386,7 +1392,9 @@ function normalizeRegisteredOrganization(org: RegisteredOrganization): Registere
                 ? 'silverpine-trust'
                 : org.name === 'Redwood Mutual'
                   ? 'redwood-mutual'
-                  : org.name,
+                  : org.name === 'Cedar Ridge Credit'
+                    ? 'cedar-ridge-credit'
+                    : org.name,
     primaryDomain,
     additionalDomains,
     catalogItemId:
@@ -1550,6 +1558,7 @@ const CANONICAL_DEMO_ORG_IDS = new Set([
   DEMO_NORTH_SUMMIT_BANK_ORG_ID,
   DEMO_HARBORLINE_CAPITAL_ORG_ID,
   DEMO_BLUESOLACE_ORG_ID,
+  DEMO_CEDAR_RIDGE_CREDIT_ORG_ID,
 ])
 
 function organizationCompletenessScore(org: RegisteredOrganization): number {
@@ -1825,8 +1834,7 @@ function removeRegisteredOrganizationsRaw(): void {
 }
 
 /**
- * Seeds North Summit Bank + Harborline Capital as Tenants page baselines:
- * Active, IdP connected, roles defined — two enterprises for VIP multi-select demos.
+ * Seeds North Summit Bank, Cedar Ridge Credit, and Harborline Capital as Tenants page baselines.
  */
 export function ensureProviderDemoOrganizations(): RegisteredOrganization[] {
   try {
@@ -1851,12 +1859,17 @@ export function ensureProviderDemoOrganizations(): RegisteredOrganization[] {
       null
 
     const northSummitBase = createDemoNorthSummitBankOrganization({
-      catalogItemId: catalogDraft?.catalogItemId ?? null,
-      catalogDisplayName: catalogDraft?.displayName ?? null,
+      catalogItemId: null,
+      catalogDisplayName: null,
       externalIpPoolId:
         northSummitPool?.id ?? DEFAULT_REGISTER_ORGANIZATION_FORM.externalIpPoolId,
       externalIpPoolName: northSummitPool?.name ?? null,
       externalIpPoolCidr: northSummitPool?.cidr ?? null,
+    })
+
+    const cedarRidgeBase = createDemoCedarRidgeCreditOrganization({
+      catalogItemId: catalogDraft?.catalogItemId ?? null,
+      catalogDisplayName: catalogDraft?.displayName ?? null,
     })
 
     const harborlineBase = createDemoHarborlineCapitalOrganization({
@@ -1871,6 +1884,8 @@ export function ensureProviderDemoOrganizations(): RegisteredOrganization[] {
       (tenant) =>
         tenant.id === northSummitBase.id ||
         tenant.slug === northSummitBase.slug ||
+        tenant.id === cedarRidgeBase.id ||
+        tenant.slug === cedarRidgeBase.slug ||
         tenant.id === harborlineBase.id ||
         tenant.slug === DEMO_HARBORLINE_CAPITAL_SLUG,
     )
@@ -1919,6 +1934,7 @@ export function ensureProviderDemoOrganizations(): RegisteredOrganization[] {
 
     setProviderRegisteredOrganizations([
       northSummit,
+      cedarRidgeBase,
       harborlineBase,
       ...remainingTenants,
     ])

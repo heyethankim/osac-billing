@@ -26,7 +26,7 @@ import { BareMetalCatalogItemDetailsBody } from '../catalog/BareMetalCatalogItem
 import { ClusterCatalogItemDetailsBody } from '../catalog/ClusterCatalogItemDetailsBody'
 import { CatalogPublishScopeIcon } from './CatalogPublishScopeIcon'
 import {
-  formatVipEnterpriseVisibilityLabel,
+  CatalogEnterpriseTenantLinks,
   getCatalogEnterpriseTenantIds,
 } from './VipEnterpriseOrganizationField'
 import type { ProviderCatalogDraft } from '../../providerSetup/storage'
@@ -37,7 +37,6 @@ import {
 import { getCatalogServiceIcon } from '../../catalog/serviceIcons'
 import {
   CATALOG_SERVICE_FILTER_LABELS,
-  formatRateCardSummary,
   type CatalogServiceId,
 } from '../../providerSetup/templateDemo'
 import { formatCatalogItemCreatedAt } from '../../catalog/catalogDetails'
@@ -49,8 +48,12 @@ import {
   resolveCatalogSpecRows,
   resolveVmCatalogHighlightRows,
 } from '../../catalog/catalogSpecs'
-import { canPublishCatalogItemToTenants } from '../../billing/m360'
-import { M360RateStatusLabel } from '../billing/M360RateStatusLabel'
+import {
+  canPublishCatalogItemToTenants,
+  getCatalogItemM360Pricing,
+  getCatalogItemM360PricingTooltip,
+} from '../../billing/m360'
+import { CatalogItemRateDisplay } from '../billing/CatalogItemRateDisplay'
 import { formatCatalogFieldPolicyMode } from '../../catalog/catalogPublishConfig'
 
 /** Demo delay for Publish → Publishing ... */
@@ -92,10 +95,10 @@ function getCatalogPublishingExtras(
           {enterpriseTenantIds.length > 1 ? 'Enterprise tenants' : 'Enterprise tenant'}
         </DescriptionListTerm>
         <DescriptionListDescription>
-          {formatVipEnterpriseVisibilityLabel(organizations, enterpriseTenantIds).replace(
-            /^VIP enterprise · /,
-            '',
-          )}
+          <CatalogEnterpriseTenantLinks
+            organizations={organizations}
+            enterpriseTenantIds={enterpriseTenantIds}
+          />
         </DescriptionListDescription>
       </DescriptionListGroup>
     )
@@ -214,6 +217,7 @@ export function CatalogItemDetailsPage({
   const showPublishing = publishCtaPhase === 'publishing'
   const showPublish = publishCtaPhase === 'publish'
   const showLive = publishCtaPhase === 'live'
+  const catalogPricing = getCatalogItemM360Pricing(catalog)
   const publishBlocked = !canPublishCatalogItemToTenants(catalog)
 
   return (
@@ -264,9 +268,7 @@ export function CatalogItemDetailsPage({
                 onClick={handlePublishClick}
                 isDisabled={showPublishing || publishBlocked}
                 title={
-                  publishBlocked
-                    ? 'Configure the rate card in M360 before publishing to tenants.'
-                    : undefined
+                  publishBlocked ? getCatalogItemM360PricingTooltip(catalogPricing) : undefined
                 }
               >
                 Publish
@@ -335,7 +337,7 @@ export function CatalogItemDetailsPage({
                 service: CATALOG_SERVICE_FILTER_LABELS[serviceId],
                 statusLabel: showLive ? 'Live' : showPublishing ? 'Publishing' : 'Unpublished',
                 statusColor: showLive ? 'green' : showPublishing ? 'blue' : 'grey',
-                rateSummary: formatRateCardSummary(catalog.rateCard),
+                rateSummary: <CatalogItemRateDisplay item={catalog} />,
                 scope: catalog.scope,
                 visibilityLabel: scopeLabel,
                 createdAtLabel: formatCatalogItemCreatedAt(catalog.createdAt),
@@ -350,7 +352,7 @@ export function CatalogItemDetailsPage({
                 service: CATALOG_SERVICE_FILTER_LABELS[serviceId],
                 statusLabel: showLive ? 'Live' : showPublishing ? 'Publishing' : 'Unpublished',
                 statusColor: showLive ? 'green' : showPublishing ? 'blue' : 'grey',
-                rateSummary: formatRateCardSummary(catalog.rateCard),
+                rateSummary: <CatalogItemRateDisplay item={catalog} />,
                 scope: catalog.scope,
                 visibilityLabel: scopeLabel,
                 createdAtLabel: formatCatalogItemCreatedAt(catalog.createdAt),
@@ -394,10 +396,7 @@ export function CatalogItemDetailsPage({
                 <DescriptionListGroup>
                   <DescriptionListTerm>Rate</DescriptionListTerm>
                   <DescriptionListDescription>
-                    <M360RateStatusLabel item={catalog} />
-                    {canPublishCatalogItemToTenants(catalog)
-                      ? formatRateCardSummary(catalog.rateCard)
-                      : null}
+                    <CatalogItemRateDisplay item={catalog} />
                   </DescriptionListDescription>
                 </DescriptionListGroup>
               </DescriptionList>
@@ -437,10 +436,10 @@ export function CatalogItemDetailsPage({
                         : 'Enterprise tenant'}
                     </DescriptionListTerm>
                     <DescriptionListDescription>
-                      {formatVipEnterpriseVisibilityLabel(
-                        organizations,
-                        getCatalogEnterpriseTenantIds(catalog),
-                      ).replace(/^VIP enterprise · /, '')}
+                      <CatalogEnterpriseTenantLinks
+                        organizations={organizations}
+                        enterpriseTenantIds={getCatalogEnterpriseTenantIds(catalog)}
+                      />
                     </DescriptionListDescription>
                   </DescriptionListGroup>
                 ) : catalog.scope === 'vip-enterprise' ? (

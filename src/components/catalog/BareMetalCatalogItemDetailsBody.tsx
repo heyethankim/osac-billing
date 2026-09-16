@@ -19,7 +19,7 @@ export type BareMetalCatalogDetailsContent = {
   service: string
   statusLabel: string
   statusColor: 'green' | 'grey' | 'blue'
-  rateSummary: string
+  rateSummary: ReactNode
   scope: PublishCatalogScope
   visibilityLabel: string
   createdAtLabel: string

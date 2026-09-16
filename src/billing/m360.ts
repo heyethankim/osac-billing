@@ -1,24 +1,45 @@
-import { findM360AccountByReference, getM360AccountTenantName } from './m360Accounts'
-import type { RegisteredOrganization } from '../providerAdmin/organizations'
-import type { ProviderCatalogDraft } from '../providerSetup/storage'
+import {
+  findM360AccountByReference,
+  findM360AccountByTenantName,
+  getM360AccountTenantName,
+  listM360PortalAccounts,
+  resolveM360AccountDetailPath,
+} from './m360Accounts'
+import {
+  isTenantBillingConfigured,
+  type RegisteredOrganization,
+} from '../providerAdmin/organizations'
+import {
+  getProviderCatalogItems,
+  getProviderRegisteredOrganizations,
+  type ProviderCatalogDraft,
+} from '../providerSetup/storage'
 import { resolveRateCard, type RateCard } from '../providerSetup/templateDemo'
 
 export type M360ConnectionStatus = 'connected' | 'pending' | 'not_found'
 
 export type M360RatePricingStatus = 'configured' | 'missing'
 
+export type M360RatePricingReason =
+  | 'configured'
+  | 'tenant_billing_incomplete'
+  | 'm360_account_inactive'
+  | 'm360_rate_missing'
+
 export type CatalogItemM360Pricing = {
   status: M360RatePricingStatus
+  reason: M360RatePricingReason
   hourlyRate: number | null
   label: string
+  tenantName?: string
 }
 
-const M360_CONFIGURED_RATES_STORAGE_KEY = 'osac-m360-configured-catalog-rates'
+export type CatalogItemPricingInput = Pick<
+  ProviderCatalogDraft,
+  'catalogItemId' | 'rateCard' | 'scope' | 'enterpriseTenantId' | 'enterpriseTenantIds'
+>
 
-/** Catalog items that ship without an M360 rate in the demo seed. */
-export const DEMO_UNCONFIGURED_M360_CATALOG_ITEM_IDS = new Set([
-  'cat-bm-dense-gpu',
-])
+const M360_CONFIGURED_RATES_STORAGE_KEY = 'osac-m360-configured-catalog-rates'
 
 export const M360_RATE_CARD_PORTAL_URL = 'https://m360.example.com/rate-cards'
 
@@ -112,12 +133,195 @@ function writeConfiguredCatalogRateIds(ids: Set<string>): void {
   localStorage.setItem(M360_CONFIGURED_RATES_STORAGE_KEY, JSON.stringify(Array.from(ids)))
 }
 
-export function isCatalogItemM360RateConfigured(catalogItemId: string): boolean {
-  if (readConfiguredCatalogRateIds().has(catalogItemId)) {
-    return true
+function resolveEnterpriseTenantIds(item: CatalogItemPricingInput): string[] {
+  if (item.enterpriseTenantIds?.length) {
+    return item.enterpriseTenantIds
   }
 
-  return !DEMO_UNCONFIGURED_M360_CATALOG_ITEM_IDS.has(catalogItemId)
+  if (item.enterpriseTenantId?.trim()) {
+    return [item.enterpriseTenantId.trim()]
+  }
+
+  return []
+}
+
+function resolveTargetOrganization(tenantId: string): RegisteredOrganization | null {
+  const normalized = tenantId.trim()
+  if (!normalized) {
+    return null
+  }
+
+  return (
+    getProviderRegisteredOrganizations().find(
+      (organization) =>
+        organization.tenantId === normalized ||
+        organization.name === normalized ||
+        organization.slug === normalized,
+    ) ?? null
+  )
+}
+
+export function getCatalogItemBillingTargetOrganization(
+  item: CatalogItemPricingInput,
+): RegisteredOrganization | null {
+  if (item.scope !== 'vip-enterprise') {
+    return null
+  }
+
+  const tenantIds = resolveEnterpriseTenantIds(item)
+  if (tenantIds.length === 0) {
+    return null
+  }
+
+  return resolveTargetOrganization(tenantIds[0])
+}
+
+function resolveOrganizationM360Account(
+  organization: RegisteredOrganization,
+  accounts = listM360PortalAccounts(),
+) {
+  const linkedReference =
+    organization.m360AccountId?.trim() || organization.billingAccountId.trim() || ''
+
+  return (
+    (linkedReference ? findM360AccountByReference(linkedReference, accounts) : null) ??
+    findM360AccountByTenantName(organization.name, accounts) ??
+    findM360AccountByTenantName(organization.tenantId, accounts)
+  )
+}
+
+export function isOrganizationM360AccountInactive(
+  organization: RegisteredOrganization,
+): boolean {
+  return resolveOrganizationM360Account(organization)?.accountStatus === 'Inactive'
+}
+
+export function getOrganizationM360AccountDetailPath(
+  organization: RegisteredOrganization,
+): string | null {
+  if (!isOrganizationM360AccountInactive(organization)) {
+    return null
+  }
+
+  const account = resolveOrganizationM360Account(organization)
+  if (account) {
+    return resolveM360AccountDetailPath(getM360AccountTenantName(account))
+  }
+
+  const linkedReference =
+    organization.m360AccountId?.trim() || organization.billingAccountId.trim() || ''
+  return linkedReference ? resolveM360AccountDetailPath(linkedReference) : null
+}
+
+export function getCatalogItemM360AccountDetailPath(
+  item: CatalogItemPricingInput,
+  pricing?: CatalogItemM360Pricing,
+): string | null {
+  const resolved = pricing ?? getCatalogItemM360Pricing(item)
+  if (resolved.reason !== 'm360_account_inactive') {
+    return null
+  }
+
+  const organization = getCatalogItemBillingTargetOrganization(item)
+  const linkedReference =
+    organization?.m360AccountId?.trim() ||
+    organization?.billingAccountId.trim() ||
+    resolved.tenantName?.trim() ||
+    ''
+
+  return linkedReference ? resolveM360AccountDetailPath(linkedReference) : null
+}
+
+function resolveBillingPricingBlocker(
+  organization: RegisteredOrganization | null,
+  tenantName: string,
+): CatalogItemM360Pricing | null {
+  const accounts = listM360PortalAccounts()
+  const linkedReference =
+    organization?.m360AccountId?.trim() || organization?.billingAccountId.trim() || ''
+  const linkedAccount = linkedReference
+    ? findM360AccountByReference(linkedReference, accounts)
+    : null
+
+  if (linkedAccount?.accountStatus === 'Inactive') {
+    return {
+      status: 'missing',
+      reason: 'm360_account_inactive',
+      hourlyRate: null,
+      label: 'Billing account inactive',
+      tenantName,
+    }
+  }
+
+  if (!organization || !isTenantBillingConfigured(organization)) {
+    return {
+      status: 'missing',
+      reason: 'tenant_billing_incomplete',
+      hourlyRate: null,
+      label: 'Billing pending',
+      tenantName,
+    }
+  }
+
+  return null
+}
+
+function resolveConfiguredPricing(rateCard: RateCard): CatalogItemM360Pricing {
+  return {
+    status: 'configured',
+    reason: 'configured',
+    hourlyRate: rateCard.hourlyRate,
+    label: `$${rateCard.hourlyRate.toFixed(2)}/hr`,
+  }
+}
+
+export function getCatalogItemM360Pricing(item: CatalogItemPricingInput): CatalogItemM360Pricing {
+  if (item.scope === 'vip-enterprise') {
+    const tenantIds = resolveEnterpriseTenantIds(item)
+    if (tenantIds.length > 0) {
+      const tenantName = tenantIds[0]
+      const organization = resolveTargetOrganization(tenantName)
+      const billingBlocker = resolveBillingPricingBlocker(organization, tenantName)
+      if (billingBlocker) {
+        return billingBlocker
+      }
+
+      return resolveConfiguredPricing(resolveRateCard(item))
+    }
+  }
+
+  return resolveConfiguredPricing(resolveRateCard(item))
+}
+
+export function getCatalogItemM360PricingTooltip(pricing: CatalogItemM360Pricing): string {
+  const accounts = listM360PortalAccounts()
+  const prospectiveAccount = pricing.tenantName
+    ? findM360AccountByTenantName(pricing.tenantName, accounts) ??
+      findM360AccountByReference(pricing.tenantName, accounts)
+    : null
+
+  switch (pricing.reason) {
+    case 'tenant_billing_incomplete':
+      if (prospectiveAccount?.accountStatus === 'Inactive') {
+        return 'Billing not linked. M360 account is inactive.'
+      }
+      return 'Finish tenant billing setup to publish.'
+    case 'm360_account_inactive':
+      return 'M360 billing account is inactive.'
+    case 'm360_rate_missing':
+      return 'Rate card missing in M360.'
+    case 'configured':
+      return 'Rate configured in M360.'
+  }
+}
+
+export function isCatalogItemM360RateConfigured(catalogItemId: string): boolean {
+  const item = getProviderCatalogItems().find((entry) => entry.catalogItemId === catalogItemId)
+  if (!item) {
+    return readConfiguredCatalogRateIds().has(catalogItemId)
+  }
+
+  return getCatalogItemM360Pricing(item).status === 'configured'
 }
 
 export function markCatalogItemM360RateConfigured(catalogItemId: string): void {
@@ -126,30 +330,7 @@ export function markCatalogItemM360RateConfigured(catalogItemId: string): void {
   writeConfiguredCatalogRateIds(next)
 }
 
-export function getCatalogItemM360Pricing(
-  item: Pick<ProviderCatalogDraft, 'catalogItemId' | 'rateCard'>,
-): CatalogItemM360Pricing {
-  const rateCard = resolveRateCard(item)
-  const configured = isCatalogItemM360RateConfigured(item.catalogItemId)
-
-  if (!configured) {
-    return {
-      status: 'missing',
-      hourlyRate: null,
-      label: 'Rate missing',
-    }
-  }
-
-  return {
-    status: 'configured',
-    hourlyRate: rateCard.hourlyRate,
-    label: `$${rateCard.hourlyRate.toFixed(2)}/hr`,
-  }
-}
-
-export function canPublishCatalogItemToTenants(
-  item: Pick<ProviderCatalogDraft, 'catalogItemId' | 'rateCard'>,
-): boolean {
+export function canPublishCatalogItemToTenants(item: CatalogItemPricingInput): boolean {
   return getCatalogItemM360Pricing(item).status === 'configured'
 }
 
@@ -162,7 +343,7 @@ export function formatHourlyEstimate(rateCard: RateCard): string {
 }
 
 export function estimateLaunchHourlyCost(options: {
-  catalogItem: Pick<ProviderCatalogDraft, 'catalogItemId' | 'rateCard'>
+  catalogItem: CatalogItemPricingInput
   instanceType?: string
   bootDiskSizeGiB?: number
 }): number | null {
@@ -199,7 +380,7 @@ export function listUnpricedCatalogItems(
   return items.filter((item) => !canPublishCatalogItemToTenants(item))
 }
 
-/** Publish wizard guardrail for templates that map to demo unpriced SKUs. */
+/** Publish wizard guardrail for templates that map to demo VIP SKUs. */
 export function isTemplateM360RateConfigured(templateRefId: string): boolean {
   if (templateRefId === 'bm-hpe-dl380-a100') {
     return isCatalogItemM360RateConfigured('cat-bm-dense-gpu')

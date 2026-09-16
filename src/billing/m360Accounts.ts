@@ -116,6 +116,27 @@ export function getM360AccountTenantName(account: M360BillingAccount): string {
   return account.accountName?.trim() || account.externalId?.trim() || account.accountId
 }
 
+export function buildM360AccountDetailPath(accountReference: string): string {
+  return `/m360/accounts/${encodeURIComponent(accountReference.trim())}`
+}
+
+export function resolveM360AccountDetailPath(
+  reference: string,
+  accounts: readonly M360BillingAccount[] = DEMO_M360_ACCOUNTS,
+): string | null {
+  const normalized = reference.trim()
+  if (!normalized) {
+    return null
+  }
+
+  const account = findM360AccountByReference(normalized, accounts)
+  if (!account) {
+    return buildM360AccountDetailPath(normalized)
+  }
+
+  return buildM360AccountDetailPath(getM360AccountTenantName(account))
+}
+
 export function formatM360AccountOptionLabel(account: M360BillingAccount): string {
   return getM360AccountTenantName(account)
 }
@@ -210,6 +231,37 @@ function isOnboardingEligibleAccount(account: M360BillingAccount): boolean {
     account.accountStatus === 'Active' &&
     account.approvalStatus === 'Approved'
   )
+}
+
+export function isM360BillingAccountInactive(account: M360BillingAccount | null): boolean {
+  return account?.accountStatus === 'Inactive'
+}
+
+export function isM360OnboardingReviewAccount(accountName: string): boolean {
+  return accountName.trim() === DEFAULT_ONBOARDING_M360_ACCOUNT_NAME
+}
+
+export function mergeResumedM360BillingAccounts(
+  eligibleAccounts: readonly M360BillingAccount[],
+  organization: Pick<RegisteredOrganization, 'm360AccountId' | 'billingAccountId'> | null,
+): M360BillingAccount[] {
+  const merged = [...eligibleAccounts]
+  if (!organization) {
+    return merged
+  }
+
+  const reference =
+    organization.m360AccountId?.trim() || organization.billingAccountId.trim() || ''
+  if (!reference) {
+    return merged
+  }
+
+  const resumedAccount = findM360AccountByReference(reference)
+  if (!resumedAccount || merged.some((account) => account.accountId === resumedAccount.accountId)) {
+    return merged
+  }
+
+  return [...merged, resumedAccount]
 }
 
 export async function fetchM360BillingAccounts(): Promise<M360BillingAccount[]> {

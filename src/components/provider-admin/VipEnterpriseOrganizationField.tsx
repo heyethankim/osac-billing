@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   Alert,
   AlertActionLink,
@@ -13,7 +14,12 @@ import {
 } from '@patternfly/react-core'
 import { CheckIcon } from '@patternfly/react-icons/dist/esm/icons/check-icon'
 import { InfoCircleIcon } from '@patternfly/react-icons/dist/esm/icons/info-circle-icon'
-import type { RegisteredOrganization } from '../../providerAdmin/organizations'
+import {
+  getOrganizationSetupSignal,
+  isTenantBillingConfigured,
+  type RegisteredOrganization,
+} from '../../providerAdmin/organizations'
+import { buildProviderOrganizationWorkspacePath } from '../../shared/workspaceNavUrl'
 
 export function normalizeEnterpriseTenantIds(
   value: string | readonly string[] | undefined,
@@ -47,6 +53,12 @@ export function VipEnterpriseOrganizationField({
 }: VipEnterpriseOrganizationFieldProps) {
   const [isLeaveConfirmOpen, setIsLeaveConfirmOpen] = useState(false)
   const selectedIdSet = new Set(normalizeEnterpriseTenantIds(selectedTenantIds))
+  const selectedOrganizations = organizations.filter((organization) =>
+    selectedIdSet.has(organization.tenantId),
+  )
+  const hasBillingIncompleteSelection = selectedOrganizations.some(
+    (organization) => !isTenantBillingConfigured(organization),
+  )
 
   const toggleOrganization = (tenantId: string) => {
     if (selectedIdSet.has(tenantId)) {
@@ -145,6 +157,8 @@ export function VipEnterpriseOrganizationField({
           {organizations.map((organization) => {
             const isSelected = selectedIdSet.has(organization.tenantId)
             const cardId = `${fieldIdPrefix}-enterprise-${organization.tenantId}`
+            const setupSignal = getOrganizationSetupSignal(organization)
+            const statusLabel = setupSignal ?? 'Ready for provisioning'
             return (
               <button
                 key={organization.id}
@@ -156,22 +170,40 @@ export function VipEnterpriseOrganizationField({
                 aria-pressed={isSelected}
                 onClick={() => toggleOrganization(organization.tenantId)}
               >
-                <span
-                  className={`provider-admin-catalog__vip-org-card-indicator${
-                    isSelected ? ' provider-admin-catalog__vip-org-card-indicator--selected' : ''
-                  }`}
-                  aria-hidden
-                >
-                  {isSelected ? <CheckIcon /> : null}
+                <span className="provider-admin-catalog__vip-org-card-header">
+                  <span
+                    className={`provider-admin-catalog__vip-org-card-indicator${
+                      isSelected ? ' provider-admin-catalog__vip-org-card-indicator--selected' : ''
+                    }`}
+                    aria-hidden
+                  >
+                    {isSelected ? <CheckIcon /> : null}
+                  </span>
+                  <span className="provider-admin-catalog__vip-org-card-name">
+                    {organization.name.trim() || organization.tenantId}
+                  </span>
                 </span>
-                <span className="provider-admin-catalog__vip-org-card-name">
-                  {organization.name.trim() || organization.tenantId}
-                </span>
+                <span className="provider-admin-catalog__vip-org-card-status">{statusLabel}</span>
               </button>
             )
           })}
         </div>
       </FormGroup>
+
+      {hasBillingIncompleteSelection ? (
+        <Alert
+          variant="warning"
+          isInline
+          title="Publishing stays blocked until billing is configured"
+          className="provider-admin-catalog__vip-billing-alert"
+        >
+          <Content component="p">
+            Selected tenants without billing setup can still be assigned to VIP catalog items, but
+            pricing and publish remain blocked until tenant registration links an M360 billing
+            account and rate card.
+          </Content>
+        </Alert>
+      ) : null}
 
       {onRegisterOrganization ? (
         <div className="provider-admin-catalog__vip-orgs-hint">
@@ -232,4 +264,42 @@ export function getCatalogEnterpriseTenantIds(item: {
   }
 
   return normalizeEnterpriseTenantIds(item.enterpriseTenantId)
+}
+
+export function CatalogEnterpriseTenantLinks({
+  organizations,
+  enterpriseTenantIds,
+}: {
+  organizations: RegisteredOrganization[]
+  enterpriseTenantIds: string[]
+}) {
+  if (enterpriseTenantIds.length === 0) {
+    return null
+  }
+
+  return (
+    <>
+      {enterpriseTenantIds.map((tenantId, index) => {
+        const organization = organizations.find((entry) => entry.tenantId === tenantId)
+        const name = organization?.name ?? tenantId
+        const organizationPathId = organization?.id
+
+        return (
+          <Fragment key={tenantId}>
+            {index > 0 ? ', ' : null}
+            {organizationPathId ? (
+              <Link
+                to={buildProviderOrganizationWorkspacePath(organizationPathId)}
+                className="provider-admin-network-inventory__related-link"
+              >
+                {name}
+              </Link>
+            ) : (
+              name
+            )}
+          </Fragment>
+        )
+      })}
+    </>
+  )
 }

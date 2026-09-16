@@ -1,5 +1,3 @@
-import { CheckCircleIcon } from '@patternfly/react-icons/dist/esm/icons/check-circle-icon'
-import { PendingIcon } from '@patternfly/react-icons/dist/esm/icons/pending-icon'
 import { EllipsisVIcon } from '@patternfly/react-icons/dist/esm/icons/ellipsis-v-icon'
 import { PlusCircleIcon } from '@patternfly/react-icons/dist/esm/icons/plus-circle-icon'
 import { useState } from 'react'
@@ -22,14 +20,16 @@ import {
   ModalFooter,
   ModalHeader,
   ModalVariant,
+  ProgressStep,
+  ProgressStepper,
   Title,
 } from '@patternfly/react-core'
 import {
   getOrganizationDisplayName,
+  getOrganizationM360AccountDetailPath,
   getOrganizationM360AccountId,
-  getOrganizationM360ConnectionStatus,
 } from '../../billing/m360'
-import { M360ConnectionStatusField } from '../billing/M360ConnectionStatusField'
+import { M360BillingAccountLink } from '../billing/M360BillingAccountLink'
 import { EntityDetailsPageShell } from '../shared/EntityDetailsPageShell'
 import { EntityDetailsActionsDropdown } from '../shared/EntityDetailsActionsDropdown'
 import {
@@ -37,7 +37,6 @@ import {
   getOrganizationOsacLoginPath,
   getTenantSetupStatusColor,
   getTenantSetupStatusLabel,
-  hasPendingIdpInvite,
   identityProviderConnectedByLabel,
   isOrganizationReadyForLogin,
   isTenantReadyForProvisioning,
@@ -79,24 +78,6 @@ function formatRegisteredAt(iso: string): string {
     hour: 'numeric',
     minute: '2-digit',
   })
-}
-
-function getIdentityProviderStepMeta(organization: RegisteredOrganization): string | null {
-  if (!organization.identityProviderConnected) {
-    if (hasPendingIdpInvite(organization)) {
-      return organization.idpManagerEmail
-        ? `Invite sent to ${organization.idpManagerEmail}`
-        : 'Waiting on IdP manager'
-    }
-    return null
-  }
-
-  const parts = [
-    organization.identityProviderProtocol,
-    organization.identityProviderDisplayName || organization.identityProviderName,
-  ].filter(Boolean)
-
-  return parts.length > 0 ? parts.join(' · ') : organization.identityProviderName
 }
 
 function AccountPersonRow({
@@ -155,7 +136,25 @@ function AccountPersonRow({
   )
 }
 
-function ActivationStepRow({
+function resolveTenantSetupProgressVariant(
+  step: OrganizationActivationStep,
+): 'success' | 'default' | 'pending' | 'warning' {
+  if (step.status === 'complete') {
+    return 'success'
+  }
+
+  if (step.status === 'problematic') {
+    return 'warning'
+  }
+
+  if (step.status === 'current') {
+    return 'default'
+  }
+
+  return 'pending'
+}
+
+function TenantSetupTimelineStep({
   step,
   organization,
   onReviewBilling,
@@ -166,23 +165,15 @@ function ActivationStepRow({
   onReviewBilling?: (organization: RegisteredOrganization) => void
   onReviewIdentityProvider?: (organization: RegisteredOrganization) => void
 }) {
-  const idpMeta = step.id === 'idp' ? getIdentityProviderStepMeta(organization) : null
+  const stepId = `tenant-setup-step-${step.id}`
   const connectedBy =
     step.id === 'idp' ? resolveIdentityProviderConnectedBy(organization) : null
   const idpConnectedByLabel = connectedBy
     ? identityProviderConnectedByLabel(connectedBy)
     : null
-  const billingMeta =
-    step.id === 'billing_account' && organization.billingAccountName
-      ? organization.billingAccountName
-      : step.id === 'rate_card' && organization.m360RateCardName
-        ? organization.m360RateCardName
-        : null
   const canReviewBilling =
-    (step.id === 'billing_account' ||
-      step.id === 'rate_card' ||
-      step.id === 'billing_linked') &&
-    !step.complete &&
+    (step.id === 'billing_account' || step.id === 'rate_card') &&
+    (step.status === 'current' || step.status === 'problematic') &&
     typeof onReviewBilling === 'function'
   const canReviewIdp =
     step.id === 'idp' &&
@@ -190,69 +181,65 @@ function ActivationStepRow({
     typeof onReviewIdentityProvider === 'function' &&
     isTenantReadyForProvisioning(organization)
 
-  return (
-    <li
-      className={[
-        'provider-admin-organizations__status-step',
-        step.complete
-          ? 'provider-admin-organizations__status-step--complete'
-          : 'provider-admin-organizations__status-step--pending',
-      ].join(' ')}
-    >
-      <span className="provider-admin-organizations__status-step-icon" aria-hidden>
-        {step.complete ? (
-          <CheckCircleIcon className="provider-admin-organizations__status-step-check" />
+  const title = (
+    <>
+      {canReviewBilling ? (
+        <Button
+          variant="link"
+          isInline
+          className="provider-admin-organizations__tenant-setup-timeline-title-link"
+          onClick={() => onReviewBilling(organization)}
+        >
+          {step.label}
+        </Button>
+      ) : null}
+      {canReviewIdp ? (
+        <Button
+          variant="link"
+          isInline
+          className="provider-admin-organizations__tenant-setup-timeline-title-link"
+          onClick={() => onReviewIdentityProvider(organization)}
+        >
+          {step.label}
+        </Button>
+      ) : null}
+      {!canReviewBilling && !canReviewIdp ? (
+        <span className="provider-admin-organizations__tenant-setup-timeline-title">{step.label}</span>
+      ) : null}
+    </>
+  )
+
+  const description =
+    step.description ? (
+      <>
+        {step.id === 'idp' && organization.identityProviderConnected ? (
+          <code>{step.description}</code>
         ) : (
-          <PendingIcon className="provider-admin-organizations__status-step-pending" />
+          step.description
         )}
-      </span>
-      <div className="provider-admin-organizations__status-step-content">
-        {canReviewBilling ? (
-          <Button
-            variant="link"
-            isInline
-            className="provider-admin-organizations__status-step-link"
-            onClick={() => onReviewBilling(organization)}
-          >
-            {step.label}
-          </Button>
-        ) : null}
-        {canReviewIdp ? (
-          <Button
-            variant="link"
-            isInline
-            className="provider-admin-organizations__status-step-link"
-            onClick={() => onReviewIdentityProvider(organization)}
-          >
-            {step.label}
-          </Button>
-        ) : null}
-        {!canReviewBilling && !canReviewIdp ? (
-          <span className="provider-admin-organizations__status-step-label">{step.label}</span>
-        ) : null}
-        <span className="pf-v6-screen-reader">
-          {step.complete ? ', complete' : ', not complete'}
-        </span>
-        {idpMeta || idpConnectedByLabel ? (
-          <Content component="p" className="provider-admin-organizations__status-step-meta">
-            {idpMeta ? (
-              organization.identityProviderConnected ? (
-                <code>{idpMeta}</code>
-              ) : (
-                idpMeta
-              )
-            ) : null}
-            {idpMeta && idpConnectedByLabel ? ' · ' : null}
-            {idpConnectedByLabel}
-          </Content>
-        ) : null}
-        {billingMeta ? (
-          <Content component="p" className="provider-admin-organizations__status-step-meta">
-            {billingMeta}
-          </Content>
-        ) : null}
-      </div>
-    </li>
+        {step.id === 'idp' && idpConnectedByLabel ? ` · ${idpConnectedByLabel}` : null}
+      </>
+    ) : undefined
+
+  return (
+    <ProgressStep
+      id={stepId}
+      titleId={`${stepId}-title`}
+      variant={resolveTenantSetupProgressVariant(step)}
+      isCurrent={step.status === 'current'}
+      aria-label={
+        step.status === 'complete'
+          ? `${step.label}, complete`
+          : step.status === 'problematic'
+            ? `${step.label}, needs attention`
+            : step.status === 'current'
+              ? `${step.label}, in progress`
+              : `${step.label}, pending`
+      }
+      description={description}
+    >
+      {title}
+    </ProgressStep>
   )
 }
 
@@ -286,6 +273,7 @@ export function OrganizationDetailsPage({
   const [administratorPendingRemove, setAdministratorPendingRemove] =
     useState<TenantAdministrator | null>(null)
   const canAssignRoles = organization.identityProviderConnected
+  const m360AccountPath = getOrganizationM360AccountDetailPath(organization)
 
   const handleAssignRoles = () => {
     if (!canAssignRoles) {
@@ -439,10 +427,13 @@ export function OrganizationDetailsPage({
                             Rate card required
                           </Content>
                         )}
-                        <M360ConnectionStatusField
-                          accountId={getOrganizationM360AccountId(organization)}
-                          status={getOrganizationM360ConnectionStatus(organization)}
-                        />
+                        {m360AccountPath ? (
+                          <Content component="p" className="provider-admin-organizations__secondary-cell">
+                            <M360BillingAccountLink to={m360AccountPath}>
+                              View billing account in M360
+                            </M360BillingAccountLink>
+                          </Content>
+                        ) : null}
                       </>
                     ) : (
                       <Content component="p" className="provider-admin-organizations__secondary-cell">
@@ -476,12 +467,13 @@ export function OrganizationDetailsPage({
               <Title headingLevel="h2" size="lg" className="entity-details-page__section-title">
                 Tenant setup
               </Title>
-              <ol
-                className="provider-admin-organizations__status-steps"
+              <ProgressStepper
+                isVertical
                 aria-label="Tenant setup progress"
+                className="provider-admin-organizations__tenant-setup-timeline"
               >
                 {activationSteps.map((step) => (
-                  <ActivationStepRow
+                  <TenantSetupTimelineStep
                     key={step.id}
                     step={step}
                     organization={organization}
@@ -489,7 +481,7 @@ export function OrganizationDetailsPage({
                     onReviewIdentityProvider={onReviewIdentityProvider}
                   />
                 ))}
-              </ol>
+              </ProgressStepper>
             </div>
           </div>
 

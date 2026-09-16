@@ -10,9 +10,9 @@ import { ProviderAdminOverviewPage } from './ProviderAdminOverviewPage'
 import { ProviderAdminBmaasTemplatesPage } from './infrastructure/ProviderAdminBmaasTemplatesPage'
 import { ProviderAdminDataCentersPage } from './infrastructure/ProviderAdminDataCentersPage'
 import { ProviderAdminHardwareInventoryPage } from './infrastructure/ProviderAdminHardwareInventoryPage'
-import { ProviderAdminBillingMeteringPage } from './ProviderAdminBillingMeteringPage'
+import { ProviderAdminBillingPage } from './ProviderAdminBillingPage'
 import { ProviderAdminOrganizationsPage } from './ProviderAdminOrganizationsPage'
-import { ProviderAdminQuotasPage } from './ProviderAdminQuotasPage'
+import { ProviderAdminRateCardsPage } from './ProviderAdminRateCardsPage'
 import { ProviderAdminExternalNetworksPage } from './infrastructure/ProviderAdminExternalNetworksPage'
 import { PlaceholderProviderAdminPage } from './PlaceholderProviderAdminPage'
 import { ProviderServiceSelectionPage } from './provider-setup/ProviderServiceSelectionPage'
@@ -280,10 +280,10 @@ export function ProviderAdminWorkspacePage() {
         return <TenantSecretsPage scope="provider" tenantSlug="" />
       case 'administration-organizations':
         return <ProviderAdminOrganizationsPage onNavigate={handleNavChange} />
-      case 'administration-quotas':
-        return <ProviderAdminQuotasPage />
-      case 'billing-metering':
-        return <ProviderAdminBillingMeteringPage />
+      case 'administration-billing':
+        return <ProviderAdminBillingPage />
+      case 'administration-rate-cards':
+        return <ProviderAdminRateCardsPage />
       case 'system':
         return (
           <PlaceholderProviderAdminPage

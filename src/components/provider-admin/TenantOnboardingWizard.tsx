@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { ExclamationTriangleIcon } from '@patternfly/react-icons/dist/esm/icons/exclamation-triangle-icon'
-import { ExternalLinkAltIcon } from '@patternfly/react-icons/dist/esm/icons/external-link-alt-icon'
 import { InfoCircleIcon } from '@patternfly/react-icons/dist/esm/icons/info-circle-icon'
 import { RedoIcon } from '@patternfly/react-icons/dist/esm/icons/redo-icon'
 import {
@@ -29,6 +28,7 @@ import {
   WizardStep,
   useWizardContext,
 } from '@patternfly/react-core'
+import { ExternalLinkButton } from '../shared/ExternalLinkButton'
 import type { ProviderCatalogDraft } from '../../providerSetup/storage'
 import {
   BLUESOLACE_ONBOARDING_M360_ACCOUNT_NAME,
@@ -40,10 +40,14 @@ import {
   findM360AccountByTenantName,
   findM360RateCard,
   formatM360PortalValue,
+  buildM360AccountDetailPath,
   getM360AccountLinkConflictMessage,
   getM360AccountTenantName,
   isM360AccountLinkedToAnotherTenant,
+  isM360BillingAccountInactive,
+  isM360OnboardingReviewAccount,
   linkM360AccountInDemoStore,
+  mergeResumedM360BillingAccounts,
   type M360BillingAccount,
 } from '../../billing/m360Accounts'
 import { resolveM360ConnectionStatus } from '../../billing/m360'
@@ -218,7 +222,15 @@ export function TenantOnboardingWizard({
     return findM360AccountByTenantName(draftTenantName, billingAccounts)
   }, [billingAccounts, draftTenantName])
 
-  const selectedAccount = findM360AccountByReference(selectedAccountName, billingAccounts)
+  const isResumeMode = Boolean(resumeOrganization)
+  const selectedAccount = selectedAccountName
+    ? findM360AccountByReference(selectedAccountName)
+    : null
+  const selectedAccountInactive = isM360BillingAccountInactive(selectedAccount)
+  const showSelectedAccountReviewWarning =
+    Boolean(selectedAccountName) &&
+    isM360OnboardingReviewAccount(selectedAccountName) &&
+    !selectedAccountInactive
   const selectedRateCard = findM360RateCard(selectedRateCardId)
   const draftOrganizationSlug = slugifyOrganizationName(form.organizationName)
   const accountConflict =
@@ -327,11 +339,12 @@ export function TenantOnboardingWizard({
     setBillingApiState('loading')
     fetchM360BillingAccounts()
       .then((accounts) => {
-        setBillingAccounts(accounts)
-        setBillingApiState('ready')
         const organization = createdOrganization ?? resumeOrganization
+        const mergedAccounts = mergeResumedM360BillingAccounts(accounts, organization)
+        setBillingAccounts(mergedAccounts)
+        setBillingApiState('ready')
         const match = draftTenantName
-          ? findM360AccountByTenantName(draftTenantName, accounts)
+          ? findM360AccountByTenantName(draftTenantName, mergedAccounts)
           : null
         const billingDefaults = getDefaultBillingSelections(organization)
         if (match) {
@@ -432,7 +445,13 @@ export function TenantOnboardingWizard({
   const handleLinkBillingAccount = async (): Promise<RegisteredOrganization | null> => {
     const organization =
       createdOrganization ?? resumeOrganization ?? buildOrganizationFromForm()
-    if (!organization || !selectedAccount || !selectedRateCard || accountConflict) {
+    if (
+      !organization ||
+      !selectedAccount ||
+      !selectedRateCard ||
+      accountConflict ||
+      isM360BillingAccountInactive(selectedAccount)
+    ) {
       return null
     }
 
@@ -661,6 +680,44 @@ export function TenantOnboardingWizard({
           </Alert>
         ) : null}
 
+        {selectedAccountInactive && selectedAccount ? (
+          <Alert
+            variant="warning"
+            isInline
+            title="M360 billing account inactive"
+            className="tenant-onboarding__alert"
+          >
+            The M360 billing account for this tenant is inactive. Activate the account in M360
+            before you can link billing.
+            <div className="tenant-onboarding__matched-account">
+              <strong>{getM360AccountTenantName(selectedAccount)}</strong>
+              <ExternalLinkButton
+                href={buildM360AccountDetailPath(getM360AccountTenantName(selectedAccount))}
+              >
+                Open M360 accounts
+              </ExternalLinkButton>
+            </div>
+          </Alert>
+        ) : null}
+
+        {showSelectedAccountReviewWarning ? (
+          <Alert
+            variant="warning"
+            isInline
+            title="Review M360 billing account"
+            className="tenant-onboarding__alert"
+          >
+            This M360 billing account may already be associated with another tenant, or linked
+            billing accounts are inactive. Check M360 accounts before continuing.
+            <div className="tenant-onboarding__matched-account">
+              <strong>{selectedAccountName}</strong>
+              <ExternalLinkButton href={M360_ACCOUNTS_PATH}>
+                Open M360 accounts
+              </ExternalLinkButton>
+            </div>
+          </Alert>
+        ) : null}
+
         {billingApiState === 'loading' ? (
           <div className="tenant-onboarding__loading">
             <Spinner size="lg" aria-label="Loading M360 billing accounts" />
@@ -695,17 +752,15 @@ export function TenantOnboardingWizard({
             </EmptyStateBody>
             <EmptyStateFooter>
               <EmptyStateActions>
-                <Button
-                  variant="primary"
-                  icon={<ExternalLinkAltIcon aria-hidden />}
-                  component="a"
-                  href={M360_ACCOUNTS_PATH}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
+                <ExternalLinkButton variant="primary" href={M360_ACCOUNTS_PATH}>
                   Create billing account in M360
-                </Button>
-                <Button variant="link" icon={<RedoIcon aria-hidden />} onClick={retryFetchAccounts}>
+                </ExternalLinkButton>
+                <Button
+                  variant="link"
+                  icon={<RedoIcon aria-hidden />}
+                  iconPosition="end"
+                  onClick={retryFetchAccounts}
+                >
                   Refresh
                 </Button>
               </EmptyStateActions>
@@ -734,10 +789,12 @@ export function TenantOnboardingWizard({
                     createdOrganization?.slug ||
                     resumeOrganization?.slug ||
                     draftOrganizationSlug
+                  const isInactive = account.accountStatus === 'Inactive'
                   const isLinkedElsewhere = isM360AccountLinkedToAnotherTenant(
                     account,
                     currentTenantSlug,
                   )
+                  const isDisabled = isLinkedElsewhere || isInactive
                   const linkedTenantLabel = formatM360PortalValue(
                     account.externalId?.trim() || account.linkedTenantSlug,
                   )
@@ -751,13 +808,13 @@ export function TenantOnboardingWizard({
                       type="button"
                       role="radio"
                       aria-checked={isSelected}
-                      aria-disabled={isLinkedElsewhere}
+                      aria-disabled={isDisabled}
                       aria-labelledby={titleId}
                       className={`provider-setup-template__select-card provider-setup-template__select-card--instance-type tenant-onboarding__account-select-card${
                         isSelected ? ' provider-setup-template__select-card--selected' : ''
-                      }${isLinkedElsewhere ? ' tenant-onboarding__account-select-card--linked' : ''}`}
+                      }${isDisabled ? ' tenant-onboarding__account-select-card--linked' : ''}`}
                       onClick={() => {
-                        if (!isLinkedElsewhere) {
+                        if (!isDisabled) {
                           setSelectedAccountName(tenantName)
                         }
                       }}
@@ -769,6 +826,14 @@ export function TenantOnboardingWizard({
                           className="provider-setup-template__select-card-selected-badge"
                         >
                           Selected
+                        </Label>
+                      ) : isInactive ? (
+                        <Label
+                          color="orange"
+                          isCompact
+                          className="provider-setup-template__select-card-selected-badge"
+                        >
+                          Inactive
                         </Label>
                       ) : isLinkedElsewhere ? (
                         <Label
@@ -813,21 +878,14 @@ export function TenantOnboardingWizard({
                   </Content>
                 </div>
                 <div className="tenant-onboarding__account-hint-actions">
-                  <Button
-                    variant="link"
-                    isInline
-                    icon={<ExternalLinkAltIcon aria-hidden />}
-                    component="a"
-                    href={M360_ACCOUNTS_PATH}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
+                  <ExternalLinkButton href={M360_ACCOUNTS_PATH}>
                     Open M360 accounts
-                  </Button>
+                  </ExternalLinkButton>
                   <Button
                     variant="link"
                     isInline
                     icon={<RedoIcon aria-hidden />}
+                    iconPosition="end"
                     onClick={retryFetchAccounts}
                   >
                     Refresh list
@@ -1037,7 +1095,10 @@ export function TenantOnboardingWizard({
 
     if (stepId === 'billing_account') {
       const canContinue =
-        billingApiState === 'ready' && Boolean(selectedAccountName) && !accountConflict
+        billingApiState === 'ready' &&
+        Boolean(selectedAccountName) &&
+        !accountConflict &&
+        !selectedAccountInactive
 
       return wrapStepFooter({
         isNextDisabled: !canContinue,
@@ -1058,7 +1119,15 @@ export function TenantOnboardingWizard({
         <TenantOnboardingNavigateFooter
           onClose={requestClose}
           isNextDisabled={isLinking || !canRegister}
-          nextButtonText={isLinking ? 'Registering…' : 'Register tenant'}
+          nextButtonText={
+            isLinking
+              ? isResumeMode
+                ? 'Saving…'
+                : 'Registering…'
+              : isResumeMode
+                ? 'Save'
+                : 'Register tenant'
+          }
           onNavigateNext={async () => {
             const linked = await handleLinkBillingAccount()
             if (linked) {
@@ -1103,7 +1172,7 @@ export function TenantOnboardingWizard({
   return (
     <ResourceCreatePageShell
       parentLabel="Tenants"
-      title="Register tenant"
+      title={isResumeMode ? 'Edit tenant' : 'Register tenant'}
       titleId="tenant-onboarding-wizard-title"
       onBack={requestClose}
     >
