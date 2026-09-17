@@ -149,13 +149,9 @@ export function BmaasLandingPage() {
       to: '/provider/workspace?nav=administration-organizations',
       companionSeparator: ', ',
       companionLink: {
-        label: 'IdP Manager',
-        to: '/idp-manager/bluesolace',
+        label: 'M360 billing account',
+        to: '/m360/accounts',
       },
-    },
-    {
-      label: 'M360 billing account',
-      to: '/m360/accounts',
     },
   ]
 
@@ -174,7 +170,11 @@ export function BmaasLandingPage() {
       description: 'Manage tenant billing, cost allocation, and usage for your organization.',
       icon: <UserIcon />,
       actions: (
-        <SingleEnterActions to="/tenant-admin/northsummit" ariaLabel="Enter Tenant Admin demo" />
+        <SingleEnterActions
+          to="/tenant-admin/northsummit"
+          disabled
+          ariaLabel="Enter Tenant Admin demo"
+        />
       ),
     },
     {
@@ -183,7 +183,11 @@ export function BmaasLandingPage() {
       description: 'Launch workloads with cost estimates and view billing-related usage.',
       icon: <UsersIcon />,
       actions: (
-        <SingleEnterActions to="/tenant-user/northsummit" ariaLabel="Enter Tenant User demo" />
+        <SingleEnterActions
+          to="/tenant-user/northsummit"
+          disabled
+          ariaLabel="Enter Tenant User demo"
+        />
       ),
     },
   ]
