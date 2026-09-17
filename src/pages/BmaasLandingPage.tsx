@@ -20,20 +20,32 @@ import { UserIcon } from '@patternfly/react-icons/dist/esm/icons/user-icon'
 import { UsersIcon } from '@patternfly/react-icons/dist/esm/icons/users-icon'
 import { Fragment, type ReactNode } from 'react'
 import { RouterButton } from '../components/RouterButton'
-import { ExternalLinkButton } from '../components/shared/ExternalLinkButton'
 import { BMAAS_LANDING_LAST_UPDATED } from '../bmaasLandingLastUpdated'
 import redHatHatLogoUrl from '../assets/Logo-RedHat-Hat-Color-RGB.svg?url'
 
 type PrototypeLink = {
   label: string
   to: string
-  external?: boolean
   companionSeparator?: string
   companionLink?: {
     label: string
     to: string
-    external?: boolean
   }
+}
+
+function LandingExternalLink({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <Button
+      variant="link"
+      isInline
+      component="a"
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      {children}
+    </Button>
+  )
 }
 
 type RoleBlockProps = {
@@ -82,27 +94,15 @@ function RoleBlock({ id, title, description, icon, actions, prototypeLinks = [] 
                   {link.companionLink ? (
                     <>
                       <span className="bmaas-role-landing__prototype-link-prefix">
-                        {link.external ? (
-                          <ExternalLinkButton href={link.to}>{link.label}</ExternalLinkButton>
-                        ) : (
-                          <RouterButton variant="link" isInline to={link.to}>
-                            {link.label}
-                          </RouterButton>
-                        )}
+                        <RouterButton variant="link" isInline to={link.to}>
+                          {link.label}
+                        </RouterButton>
                         {link.companionSeparator?.includes(',') ? ',' : link.companionSeparator}
                       </span>
-                      {link.companionLink.external ? (
-                        <ExternalLinkButton href={link.companionLink.to}>
-                          {link.companionLink.label}
-                        </ExternalLinkButton>
-                      ) : (
-                        <RouterButton variant="link" isInline to={link.companionLink.to}>
-                          {link.companionLink.label}
-                        </RouterButton>
-                      )}
+                      <RouterButton variant="link" isInline to={link.companionLink.to}>
+                        {link.companionLink.label}
+                      </RouterButton>
                     </>
-                  ) : link.external ? (
-                    <ExternalLinkButton href={link.to}>{link.label}</ExternalLinkButton>
                   ) : (
                     <RouterButton variant="link" isInline to={link.to}>
                       {link.label}
@@ -260,25 +260,25 @@ export function BmaasLandingPage() {
               flexWrap={{ default: 'wrap' }}
             >
               <span className="bmaas-role-landing__prototype-link-prefix">
-                <ExternalLinkButton href="https://redhat.atlassian.net/browse/OSAC-3788">
+                <LandingExternalLink href="https://redhat.atlassian.net/browse/OSAC-3788">
                   OSAC-3788
-                </ExternalLinkButton>
+                </LandingExternalLink>
                 <span aria-hidden>,</span>
               </span>
-              <ExternalLinkButton href="https://redhat.atlassian.net/browse/OSAC-3877">
+              <LandingExternalLink href="https://redhat.atlassian.net/browse/OSAC-3877">
                 OSAC-3877
-              </ExternalLinkButton>
+              </LandingExternalLink>
             </Flex>
             <div className="bmaas-role-landing__credits">
               <Content component="p">
                 Created by{' '}
-                <ExternalLinkButton href="https://redhat.enterprise.slack.com/archives/D021Q4YKTBR">
+                <LandingExternalLink href="https://redhat.enterprise.slack.com/archives/D021Q4YKTBR">
                   Ethan Kim
-                </ExternalLinkButton>
+                </LandingExternalLink>
                 {' & '}
-                <ExternalLinkButton href="https://redhat.enterprise.slack.com/archives/D08ABCFSWGW">
+                <LandingExternalLink href="https://redhat.enterprise.slack.com/archives/D08ABCFSWGW">
                   Kyle Baker
-                </ExternalLinkButton>
+                </LandingExternalLink>
                 {' - OpenShift UXD'}
               </Content>
               <Content component="p">Last updated: {BMAAS_LANDING_LAST_UPDATED}</Content>
