@@ -15,6 +15,14 @@ export function CatalogItemRateDisplay({ item }: CatalogItemRateDisplayProps) {
   const pricing = getCatalogItemM360Pricing(item)
 
   if (canPublishCatalogItemToTenants(item)) {
+    if (pricing.summary) {
+      return <>{pricing.summary}</>
+    }
+
+    if (pricing.rateCard) {
+      return <>{formatRateCardSummary(pricing.rateCard)}</>
+    }
+
     return <>{formatRateCardSummary(item.rateCard)}</>
   }
 

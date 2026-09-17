@@ -1,4 +1,4 @@
-import { Fragment, useMemo } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { CheckCircleIcon } from '@patternfly/react-icons/dist/esm/icons/check-circle-icon'
 import { ExclamationTriangleIcon } from '@patternfly/react-icons/dist/esm/icons/exclamation-triangle-icon'
@@ -20,6 +20,14 @@ import {
   listUnpricedCatalogItems,
   M360_RATE_CARD_PORTAL_URL,
 } from '../billing/m360'
+import {
+  countM360RateLines,
+  DEFAULT_M360_RATE_CARD_ID,
+  formatM360RateLineSummary,
+  getM360RateLineServiceLabel,
+  listM360RateLines,
+  resolveCatalogItemMappedCatalogName,
+} from '../billing/m360RateLines'
 import { DEMO_M360_RATE_CARDS } from '../billing/m360Accounts'
 import { CatalogItemRateDisplay } from '../components/billing/CatalogItemRateDisplay'
 import { M360RateStatusLabel } from '../components/billing/M360RateStatusLabel'
@@ -89,6 +97,14 @@ export function ProviderAdminRateCardsPage() {
     () => resolveBlockedCatalogTenants(unpricedItems, organizations),
     [unpricedItems, organizations],
   )
+  const [selectedRateCardId, setSelectedRateCardId] = useState(DEFAULT_M360_RATE_CARD_ID)
+  const selectedRateCard =
+    DEMO_M360_RATE_CARDS.find((card) => card.id === selectedRateCardId) ??
+    DEMO_M360_RATE_CARDS[0]
+  const selectedRateLines = useMemo(
+    () => listM360RateLines(selectedRateCard?.id ?? DEFAULT_M360_RATE_CARD_ID),
+    [selectedRateCard?.id],
+  )
   const pricedCount = catalogItems.length - unpricedItems.length
   const coveragePercent =
     catalogItems.length > 0 ? Math.round((pricedCount / catalogItems.length) * 100) : 100
@@ -106,8 +122,8 @@ export function ProviderAdminRateCardsPage() {
     <div className="provider-admin-workspace-page provider-admin-billing provider-admin-rate-cards">
       <ProviderAdminWorkspacePageHeader
         kicker="Administration"
-        title="Rate card"
-        lede="Rate cards live in M360. OSAC maps catalog SKUs here and blocks publish when pricing or billing is incomplete."
+        title="Rate cards"
+        lede="Rate cards in M360 define billable OSAC resources. Catalog SKUs resolve to a rate line before tenants can publish or launch."
         action={
           <ExternalLinkButton href={M360_RATE_CARD_PORTAL_URL} variant="primary">
             Open M360 rate cards
@@ -120,15 +136,15 @@ export function ProviderAdminRateCardsPage() {
           <CardHeader>
             <CardTitle>
               <MoneyBillIcon className="provider-admin-billing__kpi-icon" aria-hidden />
-              Rate cards in M360
+              Rate lines
             </CardTitle>
           </CardHeader>
           <CardBody>
             <Title headingLevel="h2" size="4xl" className="provider-admin-billing__kpi-value">
-              {DEMO_M360_RATE_CARDS.length}
+              {countM360RateLines(selectedRateCard?.id ?? DEFAULT_M360_RATE_CARD_ID)}
             </Title>
             <Content component="p" className="provider-admin-billing__kpi-hint">
-              Enterprise and standard pricing profiles available for onboarding
+              Billable resources on {selectedRateCard?.name ?? 'selected rate card'}
             </Content>
           </CardBody>
         </Card>
@@ -149,7 +165,7 @@ export function ProviderAdminRateCardsPage() {
               </span>
             </Title>
             <Content component="p" className="provider-admin-billing__kpi-hint">
-              Items ready to publish to tenants
+              Items with a matching M360 rate line
             </Content>
             <div className="provider-admin-billing__kpi-bar" aria-hidden>
               <div
@@ -222,7 +238,7 @@ export function ProviderAdminRateCardsPage() {
                     or add the{' '}
                   </>
                 )}
-                <span className="provider-admin-billing__kpi-detail-link">M360 rate</span>.
+                <span className="provider-admin-billing__kpi-detail-link">M360 rate line</span>.
               </Content>
             ) : (
               <Content component="p" className="provider-admin-billing__kpi-hint">
@@ -236,23 +252,98 @@ export function ProviderAdminRateCardsPage() {
       <div className="provider-admin-rate-cards__layout">
         <Card className="provider-admin-billing__table-card">
           <CardHeader>
-            <CardTitle>Available rate cards</CardTitle>
+            <CardTitle>M360 rate cards</CardTitle>
           </CardHeader>
           <CardBody>
+            <Content component="p" className="provider-admin-billing__section-lede">
+              Select a rate card to inspect billable resource lines. Tenants inherit pricing from
+              the card assigned during onboarding.
+            </Content>
             <div className="provider-admin-rate-cards__grid">
-              {DEMO_M360_RATE_CARDS.map((rateCard) => (
-                <div key={rateCard.id} className="provider-admin-rate-cards__tile">
-                  <Content component="p" className="provider-admin-rate-cards__tile-name">
-                    {rateCard.name}
-                  </Content>
-                  <Label color="blue" isCompact className="provider-admin-rate-cards__tile-region">
-                    <GlobeIcon aria-hidden />
-                    {rateCard.region}
-                  </Label>
-                  <code className="provider-admin-rate-cards__tile-id">{rateCard.id}</code>
-                </div>
-              ))}
+              {DEMO_M360_RATE_CARDS.map((rateCard) => {
+                const isSelected = rateCard.id === selectedRateCard?.id
+
+                return (
+                  <button
+                    key={rateCard.id}
+                    type="button"
+                    className={[
+                      'provider-admin-rate-cards__tile',
+                      isSelected ? 'provider-admin-rate-cards__tile--selected' : '',
+                    ]
+                      .filter(Boolean)
+                      .join(' ')}
+                    aria-pressed={isSelected}
+                    onClick={() => setSelectedRateCardId(rateCard.id)}
+                  >
+                    <Content component="p" className="provider-admin-rate-cards__tile-name">
+                      {rateCard.name}
+                    </Content>
+                    <Label color="blue" isCompact className="provider-admin-rate-cards__tile-region">
+                      <GlobeIcon aria-hidden />
+                      {rateCard.region}
+                    </Label>
+                    <Content component="p" className="provider-admin-rate-cards__tile-meta">
+                      {countM360RateLines(rateCard.id)} rate lines
+                    </Content>
+                    <code className="provider-admin-rate-cards__tile-id">{rateCard.id}</code>
+                  </button>
+                )
+              })}
             </div>
+          </CardBody>
+        </Card>
+
+        <Card className="provider-admin-billing__table-card provider-admin-rate-cards__lines-card">
+          <CardHeader>
+            <CardTitle>Rate lines — {selectedRateCard?.name}</CardTitle>
+          </CardHeader>
+          <CardBody>
+            <Content component="p" className="provider-admin-billing__section-lede">
+              Each line prices a billable OSAC resource profile. Catalog items map by SKU or by
+              service + instance type.
+            </Content>
+            <Table
+              aria-label={`Rate lines for ${selectedRateCard?.name ?? 'rate card'}`}
+              className="provider-admin-billing__table catalog-data-table"
+            >
+              <Thead>
+                <Tr>
+                  <Th>Service</Th>
+                  <Th>Resource</Th>
+                  <Th>Rate</Th>
+                  <Th>Catalog item</Th>
+                </Tr>
+              </Thead>
+              <Tbody>
+                {selectedRateLines.length > 0 ? (
+                  selectedRateLines.map((line) => {
+                    const catalogName = resolveCatalogItemMappedCatalogName(line, catalogItems)
+
+                    return (
+                      <Tr key={line.id}>
+                        <Td dataLabel="Service">{getM360RateLineServiceLabel(line.serviceId)}</Td>
+                        <Td dataLabel="Resource">{line.resourceLabel}</Td>
+                        <Td dataLabel="Rate">{formatM360RateLineSummary(line)}</Td>
+                        <Td dataLabel="Catalog item">
+                          {catalogName ?? (
+                            <span className="provider-admin-rate-cards__catalog-unmapped">
+                              Available — not in catalog
+                            </span>
+                          )}
+                        </Td>
+                      </Tr>
+                    )
+                  })
+                ) : (
+                  <Tr>
+                    <Td colSpan={4}>
+                      No rate lines configured for this rate card yet.
+                    </Td>
+                  </Tr>
+                )}
+              </Tbody>
+            </Table>
           </CardBody>
         </Card>
 
@@ -262,7 +353,8 @@ export function ProviderAdminRateCardsPage() {
           </CardHeader>
           <CardBody>
             <Content component="p" className="provider-admin-billing__section-lede">
-              Every catalog item must resolve to an M360 rate before tenants can launch workloads.
+              Every catalog item must resolve to a rate line on the applicable M360 rate card
+              before tenants can publish workloads.
             </Content>
             <Table
               aria-label="Catalog pricing coverage"

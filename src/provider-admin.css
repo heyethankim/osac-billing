@@ -5776,6 +5776,26 @@ a.provider-admin-network-inventory__related-link:hover {
   border-radius: var(--pf-t--global--border--radius--medium);
   background: var(--pf-t--global--background--color--secondary--default);
   min-block-size: 100%;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.provider-admin-rate-cards__tile--selected {
+  border-color: var(--pf-t--global--border--color--brand--default);
+  box-shadow: inset 0 0 0 1px var(--pf-t--global--border--color--brand--default);
+}
+
+.provider-admin-rate-cards__tile-meta {
+  margin: 0;
+  color: var(--pf-t--global--text--color--subtle);
+  font-size: var(--pf-t--global--font--size--sm);
+}
+
+.provider-admin-rate-cards__catalog-unmapped {
+  color: var(--pf-t--global--text--color--subtle);
 }
 
 .provider-admin-rate-cards__tile-name {
@@ -5991,6 +6011,21 @@ a.provider-admin-network-inventory__related-link:hover {
 
 .provider-admin-organizations__billing-summary-missing {
   color: var(--pf-t--global--text--color--subtle);
+}
+
+.provider-admin-organizations__billing-account-link.pf-v6-c-button {
+  padding: 0;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  vertical-align: baseline;
+}
+
+.provider-admin-organizations__billing-rates.pf-v6-c-content--p {
+  margin-block-start: var(--pf-t--global--spacer--xs);
+  margin-block-end: 0;
+  color: var(--pf-t--global--text--color--subtle);
+  font-size: var(--pf-t--global--font--size--sm);
 }
 
 .provider-admin-organizations__osac-url {

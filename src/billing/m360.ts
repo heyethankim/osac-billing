@@ -1,4 +1,11 @@
 import {
+  DEFAULT_M360_RATE_CARD_ID,
+  findM360RateLineForCatalogItem,
+  formatM360RateLineSummary,
+  listM360RateLineHeadlines,
+  m360RateLineToRateCard,
+} from './m360RateLines'
+import {
   findM360AccountByReference,
   findM360AccountByTenantName,
   getM360AccountTenantName,
@@ -14,7 +21,7 @@ import {
   getProviderRegisteredOrganizations,
   type ProviderCatalogDraft,
 } from '../providerSetup/storage'
-import { resolveRateCard, type RateCard } from '../providerSetup/templateDemo'
+import type { RateCard } from '../providerSetup/templateDemo'
 
 export type M360ConnectionStatus = 'connected' | 'pending' | 'not_found'
 
@@ -31,12 +38,22 @@ export type CatalogItemM360Pricing = {
   reason: M360RatePricingReason
   hourlyRate: number | null
   label: string
+  summary?: string
+  rateCard?: RateCard
   tenantName?: string
+  rateCardId?: string
 }
 
 export type CatalogItemPricingInput = Pick<
   ProviderCatalogDraft,
-  'catalogItemId' | 'rateCard' | 'scope' | 'enterpriseTenantId' | 'enterpriseTenantIds'
+  | 'catalogItemId'
+  | 'rateCard'
+  | 'scope'
+  | 'enterpriseTenantId'
+  | 'enterpriseTenantIds'
+  | 'serviceId'
+  | 'instanceTypeId'
+  | 'displayName'
 >
 
 const M360_CONFIGURED_RATES_STORAGE_KEY = 'osac-m360-configured-catalog-rates'
@@ -266,12 +283,49 @@ function resolveBillingPricingBlocker(
   return null
 }
 
-function resolveConfiguredPricing(rateCard: RateCard): CatalogItemM360Pricing {
+function resolveConfiguredPricingFromRateCard(
+  rateCard: RateCard,
+  rateCardId?: string,
+): CatalogItemM360Pricing {
+  const summary = `$${rateCard.hourlyRate.toFixed(2)}/hr · $${rateCard.monthlyRate.toLocaleString('en-US', { maximumFractionDigits: 0 })}/mo per instance`
+
   return {
     status: 'configured',
     reason: 'configured',
     hourlyRate: rateCard.hourlyRate,
     label: `$${rateCard.hourlyRate.toFixed(2)}/hr`,
+    summary,
+    rateCard,
+    rateCardId,
+  }
+}
+
+function resolveOrganizationRateCardId(organization: RegisteredOrganization | null): string {
+  return organization?.m360RateCardId?.trim() || DEFAULT_M360_RATE_CARD_ID
+}
+
+function resolveCatalogItemRateCardId(
+  item: CatalogItemPricingInput,
+  organization: RegisteredOrganization | null,
+): string {
+  if (item.scope === 'vip-enterprise') {
+    return resolveOrganizationRateCardId(organization)
+  }
+
+  return DEFAULT_M360_RATE_CARD_ID
+}
+
+function resolveMissingRatePricing(
+  rateCardId: string,
+  tenantName?: string,
+): CatalogItemM360Pricing {
+  return {
+    status: 'missing',
+    reason: 'm360_rate_missing',
+    hourlyRate: null,
+    label: 'Rate card line missing',
+    tenantName,
+    rateCardId,
   }
 }
 
@@ -286,11 +340,48 @@ export function getCatalogItemM360Pricing(item: CatalogItemPricingInput): Catalo
         return billingBlocker
       }
 
-      return resolveConfiguredPricing(resolveRateCard(item))
+      const rateCardId = resolveCatalogItemRateCardId(item, organization)
+      const rateLine = findM360RateLineForCatalogItem(item, rateCardId)
+      if (!rateLine) {
+        return resolveMissingRatePricing(rateCardId, tenantName)
+      }
+
+      const rateCard = m360RateLineToRateCard(rateLine)
+      return {
+        ...resolveConfiguredPricingFromRateCard(rateCard, rateCardId),
+        summary: formatM360RateLineSummary(rateLine),
+      }
     }
   }
 
-  return resolveConfiguredPricing(resolveRateCard(item))
+  const rateCardId = DEFAULT_M360_RATE_CARD_ID
+  const rateLine = findM360RateLineForCatalogItem(item, rateCardId)
+  if (!rateLine) {
+    return resolveMissingRatePricing(rateCardId)
+  }
+
+  const rateCard = m360RateLineToRateCard(rateLine)
+  return {
+    ...resolveConfiguredPricingFromRateCard(rateCard, rateCardId),
+    summary: formatM360RateLineSummary(rateLine),
+  }
+}
+
+export function formatCatalogItemM360RateSummary(item: CatalogItemPricingInput): string | null {
+  const pricing = getCatalogItemM360Pricing(item)
+  if (pricing.status !== 'configured') {
+    return null
+  }
+
+  return pricing.summary ?? pricing.label
+}
+
+export function getOrganizationM360RateCardHeadlines(
+  organization: RegisteredOrganization,
+  limit = 2,
+): string[] {
+  const rateCardId = resolveOrganizationRateCardId(organization)
+  return listM360RateLineHeadlines(rateCardId, limit)
 }
 
 export function getCatalogItemM360PricingTooltip(pricing: CatalogItemM360Pricing): string {

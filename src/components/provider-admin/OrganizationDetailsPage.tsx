@@ -1,7 +1,6 @@
 import { EllipsisVIcon } from '@patternfly/react-icons/dist/esm/icons/ellipsis-v-icon'
 import { PlusCircleIcon } from '@patternfly/react-icons/dist/esm/icons/plus-circle-icon'
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Fragment, useState } from 'react'
 import {
   Button,
   ClipboardCopy,
@@ -28,9 +27,11 @@ import {
 import {
   getOrganizationDisplayName,
   getOrganizationM360AccountId,
+  getOrganizationM360RateCardHeadlines,
   isOrganizationM360AccountInactive,
 } from '../../billing/m360'
 import { buildM360AccountDetailPath } from '../../billing/m360Accounts'
+import { M360BillingAccountLink } from '../billing/M360BillingAccountLink'
 import { EntityDetailsPageShell } from '../shared/EntityDetailsPageShell'
 import { EntityDetailsActionsDropdown } from '../shared/EntityDetailsActionsDropdown'
 import {
@@ -258,6 +259,8 @@ function TenantBillingConfiguration({
   const m360AccountId = getOrganizationM360AccountId(organization)
   const rateCardName = organization.m360RateCardName?.trim()
   const accountInactive = isOrganizationM360AccountInactive(organization)
+  const rateHeadlines =
+    rateCardName && !accountInactive ? getOrganizationM360RateCardHeadlines(organization, 2) : []
 
   if (!m360AccountId) {
     return (
@@ -276,30 +279,42 @@ function TenantBillingConfiguration({
   }
 
   return (
-    <Content component="p" className="provider-admin-organizations__billing-summary">
-      <Link
-        to={buildM360AccountDetailPath(m360AccountId)}
-        className="provider-admin-billing__tenant-link"
-      >
-        {m360AccountId}
-      </Link>
-      {accountInactive ? (
-        <>
-          <BillingSummarySeparator />
-          <Label color="orange" isCompact>
-            Inactive
-          </Label>
-        </>
+    <Fragment>
+      <Content component="p" className="provider-admin-organizations__billing-summary">
+        <M360BillingAccountLink
+          to={buildM360AccountDetailPath(m360AccountId)}
+          className="provider-admin-organizations__billing-account-link"
+        >
+          {m360AccountId}
+        </M360BillingAccountLink>
+        {accountInactive ? (
+          <>
+            <BillingSummarySeparator />
+            <Label color="orange" isCompact>
+              Inactive
+            </Label>
+          </>
+        ) : null}
+        <BillingSummarySeparator />
+        {rateCardName ? (
+          <span>{rateCardName}</span>
+        ) : (
+          <span className="provider-admin-organizations__billing-summary-missing">
+            Rate card not assigned
+          </span>
+        )}
+      </Content>
+      {rateHeadlines.length > 0 ? (
+        <Content component="p" className="provider-admin-organizations__billing-rates">
+          {rateHeadlines.map((headline, index) => (
+            <span key={headline}>
+              {index > 0 ? <BillingSummarySeparator /> : null}
+              {headline}
+            </span>
+          ))}
+        </Content>
       ) : null}
-      <BillingSummarySeparator />
-      {rateCardName ? (
-        <span>{rateCardName}</span>
-      ) : (
-        <span className="provider-admin-organizations__billing-summary-missing">
-          Rate card not assigned
-        </span>
-      )}
-    </Content>
+    </Fragment>
   )
 }
 

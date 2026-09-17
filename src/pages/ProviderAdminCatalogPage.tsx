@@ -67,12 +67,15 @@ import {
   CATALOG_SERVICE_FILTER_LABELS,
   CATALOG_SERVICE_LABELS,
   DEFAULT_BLUEPRINT_FORM,
-  formatRateCardSummary,
   parseRateCardFromForm,
   type CatalogServiceId,
   type PublishedTemplatePayload,
 } from '../providerSetup/templateDemo'
-import { canPublishCatalogItemToTenants, getCatalogItemM360Pricing } from '../billing/m360'
+import {
+  canPublishCatalogItemToTenants,
+  formatCatalogItemM360RateSummary,
+  getCatalogItemM360Pricing,
+} from '../billing/m360'
 import { M360RateMissingModal } from '../components/billing/M360RateMissingModal'
 import { M360RateStatusLabel } from '../components/billing/M360RateStatusLabel'
 import { ProviderSetupPublishCatalogWizard } from './provider-setup/ProviderSetupPublishCatalogWizard'
@@ -1220,7 +1223,7 @@ export function ProviderAdminCatalogPage({
                       <dd>
                         <M360RateStatusLabel item={item} />
                         {canPublishCatalogItemToTenants(item)
-                          ? formatRateCardSummary(item.rateCard)
+                          ? formatCatalogItemM360RateSummary(item)
                           : null}
                       </dd>
                     </div>
