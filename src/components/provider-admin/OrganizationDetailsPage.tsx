@@ -1,6 +1,7 @@
 import { EllipsisVIcon } from '@patternfly/react-icons/dist/esm/icons/ellipsis-v-icon'
 import { PlusCircleIcon } from '@patternfly/react-icons/dist/esm/icons/plus-circle-icon'
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   Button,
   ClipboardCopy,
@@ -26,10 +27,10 @@ import {
 } from '@patternfly/react-core'
 import {
   getOrganizationDisplayName,
-  getOrganizationM360AccountDetailPath,
   getOrganizationM360AccountId,
+  isOrganizationM360AccountInactive,
 } from '../../billing/m360'
-import { M360BillingAccountLink } from '../billing/M360BillingAccountLink'
+import { buildM360AccountDetailPath } from '../../billing/m360Accounts'
 import { EntityDetailsPageShell } from '../shared/EntityDetailsPageShell'
 import { EntityDetailsActionsDropdown } from '../shared/EntityDetailsActionsDropdown'
 import {
@@ -243,6 +244,65 @@ function TenantSetupTimelineStep({
   )
 }
 
+function BillingSummarySeparator() {
+  return <span className="provider-admin-organizations__billing-summary-separator" aria-hidden> · </span>
+}
+
+function TenantBillingConfiguration({
+  organization,
+  onReviewBilling,
+}: {
+  organization: RegisteredOrganization
+  onReviewBilling?: (organization: RegisteredOrganization) => void
+}) {
+  const m360AccountId = getOrganizationM360AccountId(organization)
+  const rateCardName = organization.m360RateCardName?.trim()
+  const accountInactive = isOrganizationM360AccountInactive(organization)
+
+  if (!m360AccountId) {
+    return (
+      <Content component="p" className="provider-admin-organizations__billing-summary">
+        Not configured
+        {onReviewBilling ? (
+          <>
+            <BillingSummarySeparator />
+            <Button variant="link" isInline onClick={() => onReviewBilling(organization)}>
+              Complete billing setup
+            </Button>
+          </>
+        ) : null}
+      </Content>
+    )
+  }
+
+  return (
+    <Content component="p" className="provider-admin-organizations__billing-summary">
+      <Link
+        to={buildM360AccountDetailPath(m360AccountId)}
+        className="provider-admin-billing__tenant-link"
+      >
+        {m360AccountId}
+      </Link>
+      {accountInactive ? (
+        <>
+          <BillingSummarySeparator />
+          <Label color="orange" isCompact>
+            Inactive
+          </Label>
+        </>
+      ) : null}
+      <BillingSummarySeparator />
+      {rateCardName ? (
+        <span>{rateCardName}</span>
+      ) : (
+        <span className="provider-admin-organizations__billing-summary-missing">
+          Rate card not assigned
+        </span>
+      )}
+    </Content>
+  )
+}
+
 function getDetailsBreakGlassUsername(organization: RegisteredOrganization): string | null {
   if (resolveIdentityProviderConnectedBy(organization) === 'provider-admin') {
     return null
@@ -273,7 +333,6 @@ export function OrganizationDetailsPage({
   const [administratorPendingRemove, setAdministratorPendingRemove] =
     useState<TenantAdministrator | null>(null)
   const canAssignRoles = organization.identityProviderConnected
-  const m360AccountPath = getOrganizationM360AccountDetailPath(organization)
 
   const handleAssignRoles = () => {
     if (!canAssignRoles) {
@@ -408,50 +467,12 @@ export function OrganizationDetailsPage({
                   </DescriptionListDescription>
                 </DescriptionListGroup>
                 <DescriptionListGroup>
-                  <DescriptionListTerm>Billing configuration</DescriptionListTerm>
+                  <DescriptionListTerm>Billing</DescriptionListTerm>
                   <DescriptionListDescription>
-                    {getOrganizationM360AccountId(organization) ? (
-                      <>
-                        <Content component="p" className="provider-admin-organizations__secondary-cell">
-                          {organization.billingAccountName || 'M360 billing account'}
-                        </Content>
-                        <Content component="p" className="provider-admin-organizations__secondary-cell">
-                          <code>Tenant name: {getOrganizationM360AccountId(organization)}</code>
-                        </Content>
-                        {organization.m360RateCardName ? (
-                          <Content component="p" className="provider-admin-organizations__secondary-cell">
-                            Rate card: {organization.m360RateCardName}
-                          </Content>
-                        ) : (
-                          <Content component="p" className="provider-admin-organizations__secondary-cell">
-                            Rate card required
-                          </Content>
-                        )}
-                        {m360AccountPath ? (
-                          <Content component="p" className="provider-admin-organizations__secondary-cell">
-                            <M360BillingAccountLink to={m360AccountPath}>
-                              View billing account in M360
-                            </M360BillingAccountLink>
-                          </Content>
-                        ) : null}
-                      </>
-                    ) : (
-                      <Content component="p" className="provider-admin-organizations__secondary-cell">
-                        No M360 billing account configured.
-                        {onReviewBilling ? (
-                          <>
-                            {' '}
-                            <Button
-                              variant="link"
-                              isInline
-                              onClick={() => onReviewBilling(organization)}
-                            >
-                              Complete billing setup
-                            </Button>
-                          </>
-                        ) : null}
-                      </Content>
-                    )}
+                    <TenantBillingConfiguration
+                      organization={organization}
+                      onReviewBilling={onReviewBilling}
+                    />
                   </DescriptionListDescription>
                 </DescriptionListGroup>
                 <DescriptionListGroup>

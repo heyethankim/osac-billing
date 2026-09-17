@@ -5981,6 +5981,18 @@ a.provider-admin-network-inventory__related-link:hover {
   --pf-v6-c-button--FontSize: var(--pf-t--global--font--size--body--sm);
 }
 
+.provider-admin-organizations__billing-summary.pf-v6-c-content--p {
+  margin: 0;
+}
+
+.provider-admin-organizations__billing-summary-separator {
+  color: var(--pf-t--global--text--color--subtle);
+}
+
+.provider-admin-organizations__billing-summary-missing {
+  color: var(--pf-t--global--text--color--subtle);
+}
+
 .provider-admin-organizations__osac-url {
   display: inline-flex;
   font-size: var(--pf-t--global--font--size--body--sm);
