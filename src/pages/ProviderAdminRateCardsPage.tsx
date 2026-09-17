@@ -1,10 +1,10 @@
-import { useMemo } from 'react'
+import { Fragment, useMemo } from 'react'
+import { Link } from 'react-router-dom'
 import { CheckCircleIcon } from '@patternfly/react-icons/dist/esm/icons/check-circle-icon'
 import { ExclamationTriangleIcon } from '@patternfly/react-icons/dist/esm/icons/exclamation-triangle-icon'
 import { GlobeIcon } from '@patternfly/react-icons/dist/esm/icons/globe-icon'
 import { MoneyBillIcon } from '@patternfly/react-icons/dist/esm/icons/money-bill-icon'
 import {
-  Alert,
   Card,
   CardBody,
   CardHeader,
@@ -25,17 +25,70 @@ import { CatalogItemRateDisplay } from '../components/billing/CatalogItemRateDis
 import { M360RateStatusLabel } from '../components/billing/M360RateStatusLabel'
 import { ProviderAdminWorkspacePageHeader } from '../components/provider-admin/ProviderAdminWorkspacePageHeader'
 import { ExternalLinkButton } from '../components/shared/ExternalLinkButton'
+import type { ProviderCatalogDraft } from '../providerSetup/storage'
 import { getProviderCatalogItems, getProviderRegisteredOrganizations } from '../providerSetup/storage'
-import { CatalogEnterpriseTenantLinks } from '../components/provider-admin/VipEnterpriseOrganizationField'
+import {
+  CatalogEnterpriseTenantLinks,
+  getCatalogEnterpriseTenantIds,
+} from '../components/provider-admin/VipEnterpriseOrganizationField'
+import type { RegisteredOrganization } from '../providerAdmin/organizations'
+import { buildProviderOrganizationWorkspacePath } from '../shared/workspaceNavUrl'
 
-function formatCatalogScopeLabel(scope: string): string {
-  return scope === 'vip-enterprise' ? 'VIP enterprise' : 'Platform'
+const PROVIDER_BILLING_NAV_PATH = '/provider/workspace?nav=administration-billing'
+
+type BlockedTenantRef = {
+  organizationId: string | null
+  name: string
+}
+
+function formatCatalogVisibilityLabel(scope: string): string {
+  return scope === 'vip-enterprise' ? 'VIP enterprise' : 'Global public'
+}
+
+function resolveBlockedCatalogTenants(
+  unpricedItems: ProviderCatalogDraft[],
+  organizations: RegisteredOrganization[],
+): BlockedTenantRef[] {
+  const seen = new Set<string>()
+  const tenants: BlockedTenantRef[] = []
+
+  for (const item of unpricedItems) {
+    const pricing = getCatalogItemM360Pricing(item)
+    const tenantIds = pricing.tenantName
+      ? [pricing.tenantName]
+      : getCatalogEnterpriseTenantIds(item)
+
+    for (const tenantId of tenantIds) {
+      if (seen.has(tenantId)) {
+        continue
+      }
+
+      seen.add(tenantId)
+      const organization = organizations.find(
+        (entry) =>
+          entry.tenantId === tenantId ||
+          entry.name === tenantId ||
+          entry.slug === tenantId,
+      )
+
+      tenants.push({
+        organizationId: organization?.id ?? null,
+        name: organization?.name ?? tenantId,
+      })
+    }
+  }
+
+  return tenants
 }
 
 export function ProviderAdminRateCardsPage() {
   const catalogItems = useMemo(() => getProviderCatalogItems(), [])
   const organizations = useMemo(() => getProviderRegisteredOrganizations(), [])
   const unpricedItems = useMemo(() => listUnpricedCatalogItems(catalogItems), [catalogItems])
+  const blockedTenants = useMemo(
+    () => resolveBlockedCatalogTenants(unpricedItems, organizations),
+    [unpricedItems, organizations],
+  )
   const pricedCount = catalogItems.length - unpricedItems.length
   const coveragePercent =
     catalogItems.length > 0 ? Math.round((pricedCount / catalogItems.length) * 100) : 100
@@ -54,9 +107,9 @@ export function ProviderAdminRateCardsPage() {
       <ProviderAdminWorkspacePageHeader
         kicker="Administration"
         title="Rate card"
-        lede="Rate cards are authored in M360. OSAC maps catalog SKUs to those rates and blocks publish when pricing or tenant billing is incomplete."
+        lede="Rate cards live in M360. OSAC maps catalog SKUs here and blocks publish when pricing or billing is incomplete."
         action={
-          <ExternalLinkButton href={M360_RATE_CARD_PORTAL_URL}>
+          <ExternalLinkButton href={M360_RATE_CARD_PORTAL_URL} variant="primary">
             Open M360 rate cards
           </ExternalLinkButton>
         }
@@ -135,35 +188,50 @@ export function ProviderAdminRateCardsPage() {
             >
               {unpricedItems.length}
             </Title>
-            <Content component="p" className="provider-admin-billing__kpi-hint">
-              {unpricedItems.length > 0
-                ? 'Missing M360 rate or tenant billing is incomplete'
-                : 'All catalog items can publish'}
-            </Content>
+            {unpricedItems.length > 0 ? (
+              <Content component="p" className="provider-admin-billing__kpi-detail">
+                {blockedTenants.length > 0 ? (
+                  <>
+                    Fix billing for{' '}
+                    {blockedTenants.map((tenant, index) => (
+                      <Fragment key={tenant.name}>
+                        {index > 0 ? ', ' : null}
+                        {tenant.organizationId ? (
+                          <Link
+                            to={buildProviderOrganizationWorkspacePath(tenant.organizationId)}
+                            className="provider-admin-billing__kpi-detail-link"
+                          >
+                            {tenant.name}
+                          </Link>
+                        ) : (
+                          tenant.name
+                        )}
+                      </Fragment>
+                    ))}{' '}
+                    or add the{' '}
+                  </>
+                ) : (
+                  <>
+                    Fix{' '}
+                    <Link
+                      to={PROVIDER_BILLING_NAV_PATH}
+                      className="provider-admin-billing__kpi-detail-link"
+                    >
+                      tenant billing
+                    </Link>{' '}
+                    or add the{' '}
+                  </>
+                )}
+                <span className="provider-admin-billing__kpi-detail-link">M360 rate</span>.
+              </Content>
+            ) : (
+              <Content component="p" className="provider-admin-billing__kpi-hint">
+                All catalog items can publish
+              </Content>
+            )}
           </CardBody>
         </Card>
       </div>
-
-      {unpricedItems.length > 0 ? (
-        <Alert
-          variant="warning"
-          title="Catalog publish is blocked for some items"
-          className="provider-admin-billing__alert"
-          isInline
-        >
-          <Content component="p">
-            Resolve tenant billing or add the matching M360 rate before publishing VIP catalog
-            items to enterprise tenants.
-          </Content>
-        </Alert>
-      ) : (
-        <Alert
-          variant="success"
-          title="Catalog pricing coverage is complete"
-          className="provider-admin-billing__alert"
-          isInline
-        />
-      )}
 
       <div className="provider-admin-rate-cards__layout">
         <Card className="provider-admin-billing__table-card">
@@ -198,13 +266,12 @@ export function ProviderAdminRateCardsPage() {
             </Content>
             <Table
               aria-label="Catalog pricing coverage"
-              variant="compact"
               className="provider-admin-billing__table catalog-data-table"
             >
               <Thead>
                 <Tr>
                   <Th>Catalog item</Th>
-                  <Th>Scope</Th>
+                  <Th>Visibility</Th>
                   <Th>Enterprise tenant</Th>
                   <Th>M360 pricing</Th>
                 </Tr>
@@ -229,12 +296,12 @@ export function ProviderAdminRateCardsPage() {
                       }
                     >
                       <Td dataLabel="Catalog item">{item.displayName}</Td>
-                      <Td dataLabel="Scope">
+                      <Td dataLabel="Visibility">
                         <Label
                           color={item.scope === 'vip-enterprise' ? 'purple' : 'grey'}
                           isCompact
                         >
-                          {formatCatalogScopeLabel(item.scope)}
+                          {formatCatalogVisibilityLabel(item.scope)}
                         </Label>
                       </Td>
                       <Td dataLabel="Enterprise tenant">
@@ -243,15 +310,22 @@ export function ProviderAdminRateCardsPage() {
                             organizations={organizations}
                             enterpriseTenantIds={enterpriseTenantIds}
                           />
-                        ) : (
+                        ) : item.scope === 'vip-enterprise' ? (
                           '—'
+                        ) : (
+                          'All'
                         )}
                       </Td>
                       <Td dataLabel="M360 pricing">
                         {pricing.status === 'configured' ? (
                           <CatalogItemRateDisplay item={item} />
                         ) : (
-                          <M360RateStatusLabel item={item} pricing={pricing} hideWhenConfigured={false} />
+                          <M360RateStatusLabel
+                            item={item}
+                            pricing={pricing}
+                            hideWhenConfigured={false}
+                            linkLabelToM360={pricing.reason === 'm360_account_inactive'}
+                          />
                         )}
                       </Td>
                     </Tr>

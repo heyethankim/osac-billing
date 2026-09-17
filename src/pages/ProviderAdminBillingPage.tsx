@@ -1,12 +1,10 @@
-import { useMemo } from 'react'
+import { Fragment, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { CheckCircleIcon } from '@patternfly/react-icons/dist/esm/icons/check-circle-icon'
 import { ExclamationTriangleIcon } from '@patternfly/react-icons/dist/esm/icons/exclamation-triangle-icon'
-import { InProgressIcon } from '@patternfly/react-icons/dist/esm/icons/in-progress-icon'
 import { SyncIcon } from '@patternfly/react-icons/dist/esm/icons/sync-icon'
 import { UsersIcon } from '@patternfly/react-icons/dist/esm/icons/users-icon'
 import {
-  Alert,
   Button,
   Card,
   CardBody,
@@ -71,9 +69,6 @@ export function ProviderAdminBillingPage() {
   const linkedCount = accounts.filter(
     (account) => account.externalId || account.linkedTenantSlug,
   ).length
-  const pendingApprovalCount = accounts.filter(
-    (account) => account.approvalStatus === 'Draft',
-  ).length
   const tenantsWithBilling = organizations.filter(
     (organization) =>
       organization.m360AccountId?.trim() || organization.billingAccountId.trim(),
@@ -85,13 +80,15 @@ export function ProviderAdminBillingPage() {
       <ProviderAdminWorkspacePageHeader
         kicker="Administration"
         title="Billing"
-        lede="Billing accounts live in M360. OSAC reads account status here to gate tenant onboarding, catalog publish, and provisioning."
+        lede="Billing accounts live in M360. OSAC reads status here to gate tenant onboarding and catalog publish."
         action={
-          <ExternalLinkButton href={M360_ACCOUNTS_PATH}>Open M360 accounts</ExternalLinkButton>
+          <ExternalLinkButton href={M360_ACCOUNTS_PATH} variant="primary">
+            Open M360 accounts
+          </ExternalLinkButton>
         }
       />
 
-      <div className="provider-admin-billing__kpi-grid">
+      <div className="provider-admin-billing__kpi-grid provider-admin-billing__kpi-grid--three">
         <Card isFullHeight className="provider-admin-billing__kpi-card">
           <CardHeader>
             <CardTitle>
@@ -104,7 +101,10 @@ export function ProviderAdminBillingPage() {
               {activeCount}
             </Title>
             <Content component="p" className="provider-admin-billing__kpi-hint">
-              {accounts.length} accounts synced from M360
+              <Link to={M360_ACCOUNTS_PATH} className="provider-admin-billing__kpi-detail-link">
+                {accounts.length} accounts
+              </Link>{' '}
+              synced from M360
             </Content>
           </CardBody>
         </Card>
@@ -169,46 +169,33 @@ export function ProviderAdminBillingPage() {
             >
               {inactiveCount}
             </Title>
-            <Content component="p" className="provider-admin-billing__kpi-hint">
-              {inactiveCount > 0
-                ? 'Blocking onboarding and catalog publish until activated in M360'
-                : 'No inactive billing accounts'}
-            </Content>
-          </CardBody>
-        </Card>
+            {inactiveCount > 0 ? (
+              <Content component="p" className="provider-admin-billing__kpi-detail">
+                {inactiveAccounts.map((account, index) => {
+                  const accountName = getM360AccountTenantName(account)
 
-        <Card isFullHeight className="provider-admin-billing__kpi-card">
-          <CardHeader>
-            <CardTitle>
-              <InProgressIcon className="provider-admin-billing__kpi-icon" aria-hidden />
-              Pending approval
-            </CardTitle>
-          </CardHeader>
-          <CardBody>
-            <Title headingLevel="h2" size="4xl" className="provider-admin-billing__kpi-value">
-              {pendingApprovalCount}
-            </Title>
-            <Content component="p" className="provider-admin-billing__kpi-hint">
-              M360 accounts still in Draft approval
-            </Content>
+                  return (
+                    <Fragment key={account.accountId}>
+                      {index > 0 ? ', ' : null}
+                      <Link
+                        to={buildM360AccountDetailPath(accountName)}
+                        className="provider-admin-billing__kpi-detail-link"
+                      >
+                        {accountName}
+                      </Link>
+                    </Fragment>
+                  )
+                })}{' '}
+                {inactiveAccounts.length === 1 ? 'is' : 'are'} inactive in M360.
+              </Content>
+            ) : (
+              <Content component="p" className="provider-admin-billing__kpi-hint">
+                No inactive billing accounts
+              </Content>
+            )}
           </CardBody>
         </Card>
       </div>
-
-      {inactiveCount > 0 ? (
-        <Alert
-          variant="warning"
-          title="Inactive billing accounts need attention"
-          className="provider-admin-billing__alert"
-          isInline
-        >
-          <Content component="p">
-            {inactiveAccounts.map((account) => getM360AccountTenantName(account)).join(', ')}{' '}
-            {inactiveAccounts.length === 1 ? 'is' : 'are'} inactive in M360. Activate the account or
-            choose a different billing account before tenants can publish catalog items.
-          </Content>
-        </Alert>
-      ) : null}
 
       <Card className="provider-admin-billing__table-card">
         <CardHeader>
@@ -236,7 +223,6 @@ export function ProviderAdminBillingPage() {
 
           <Table
             aria-label="M360 billing accounts"
-            variant="compact"
             className="provider-admin-billing__table catalog-data-table"
           >
             <Thead>
@@ -270,12 +256,15 @@ export function ProviderAdminBillingPage() {
                     }
                   >
                     <Td dataLabel="Name">
-                      <M360BillingAccountLink to={buildM360AccountDetailPath(accountName)}>
+                      <M360BillingAccountLink
+                        to={buildM360AccountDetailPath(accountName)}
+                        className="provider-admin-billing__account-link"
+                      >
                         {formatM360PortalValue(account.accountName)}
                       </M360BillingAccountLink>
                     </Td>
                     <Td dataLabel="Account number">
-                      <code>{formatM360PortalValue(account.accountNumber)}</code>
+                      {formatM360PortalValue(account.accountNumber)}
                     </Td>
                     <Td dataLabel="Status">
                       {statusColor ? (
@@ -288,7 +277,7 @@ export function ProviderAdminBillingPage() {
                       <Label color={approvalColor} isCompact>{account.approvalStatus}</Label>
                     </Td>
                     <Td dataLabel="External ID">
-                      <code>{formatM360PortalValue(account.externalId)}</code>
+                      {formatM360PortalValue(account.externalId)}
                     </Td>
                     <Td dataLabel="Linked tenant">
                       {linkedOrganization ? (

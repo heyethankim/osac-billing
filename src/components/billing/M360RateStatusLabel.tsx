@@ -14,8 +14,10 @@ type M360RateStatusLabelProps = {
   pricing?: CatalogItemM360Pricing
   /** When true, configured items render nothing — the rate amount is shown separately. */
   hideWhenConfigured?: boolean
-  /** Detail pages only — list views show status without an M360 navigation link. */
+  /** Detail pages — append a separate View in M360 link after the status label. */
   showM360AccountLink?: boolean
+  /** Admin tables — link the status label itself to M360 (avoids repeating View in M360). */
+  linkLabelToM360?: boolean
 }
 
 export function M360RateStatusLabel({
@@ -23,11 +25,13 @@ export function M360RateStatusLabel({
   pricing,
   hideWhenConfigured = true,
   showM360AccountLink = false,
+  linkLabelToM360 = false,
 }: M360RateStatusLabelProps) {
   const resolved = pricing ?? getCatalogItemM360Pricing(item)
-  const m360AccountPath = showM360AccountLink
-    ? getCatalogItemM360AccountDetailPath(item, resolved)
-    : null
+  const m360AccountPath =
+    showM360AccountLink || linkLabelToM360
+      ? getCatalogItemM360AccountDetailPath(item, resolved)
+      : null
 
   if (hideWhenConfigured && resolved.status === 'configured') {
     return null
@@ -41,14 +45,26 @@ export function M360RateStatusLabel({
     )
   }
 
+  const statusLabel =
+    linkLabelToM360 && m360AccountPath ? (
+      <M360BillingAccountLink
+        to={m360AccountPath}
+        className="billing-m360-rate-status__label-link"
+      >
+        {resolved.label}
+      </M360BillingAccountLink>
+    ) : (
+      <span>{resolved.label}</span>
+    )
+
   return (
     <Tooltip content={getCatalogItemM360PricingTooltip(resolved)} position="top">
       <span className="billing-m360-rate-status" role="status">
         <Icon size="sm" status="warning" aria-hidden>
           <WarningTriangleIcon />
         </Icon>
-        <span>{resolved.label}</span>
-        {m360AccountPath ? (
+        {statusLabel}
+        {showM360AccountLink && m360AccountPath && !linkLabelToM360 ? (
           <>
             <span className="billing-m360-rate-status__separator" aria-hidden> · </span>
             <M360BillingAccountLink to={m360AccountPath} />

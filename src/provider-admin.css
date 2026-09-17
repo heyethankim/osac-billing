@@ -5524,6 +5524,10 @@ a.provider-admin-network-inventory__related-link:hover {
   margin-block-start: var(--pf-t--global--spacer--md);
 }
 
+.provider-admin-billing__table.catalog-data-table {
+  --pf-v6-c-table--cell--PaddingBlock: var(--pf-t--global--spacer--lg);
+}
+
 .provider-admin-organizations__drawer-panel {
   --pf-v6-c-drawer__panel--PaddingBlockStart: var(--pf-t--global--spacer--md);
 }
@@ -5612,7 +5616,6 @@ a.provider-admin-network-inventory__related-link:hover {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--pf-t--global--spacer--lg);
-  margin-block-end: var(--pf-t--global--spacer--lg);
 }
 
 .provider-admin-billing__kpi-grid--three {
@@ -5667,6 +5670,25 @@ a.provider-admin-network-inventory__related-link:hover {
   font-size: var(--pf-t--global--font--size--body--sm);
 }
 
+.provider-admin-billing__kpi-detail {
+  margin-block-start: var(--pf-t--global--spacer--sm);
+  color: var(--pf-t--global--text--color--regular);
+  font-size: var(--pf-t--global--font--size--body--sm);
+  line-height: 1.45;
+}
+
+.provider-admin-billing__kpi-detail-link {
+  color: var(--pf-t--global--text--color--link--default);
+  font-weight: var(--pf-t--global--font--weight--body--default);
+  text-decoration: none;
+}
+
+.provider-admin-billing__kpi-detail-link:hover,
+.provider-admin-billing__kpi-detail-link:focus {
+  color: var(--pf-t--global--text--color--link--hover);
+  text-decoration: underline;
+}
+
 .provider-admin-billing__kpi-bar {
   margin-block-start: var(--pf-t--global--spacer--md);
   height: 0.375rem;
@@ -5703,12 +5725,19 @@ a.provider-admin-network-inventory__related-link:hover {
   );
 }
 
+.provider-admin-billing__account-link.pf-v6-c-button,
 .provider-admin-billing__tenant-link {
+  padding: 0;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: var(--pf-t--global--font--weight--body--default);
+  line-height: inherit;
   color: var(--pf-t--global--text--color--link--default);
   text-decoration: none;
-  font-weight: var(--pf-t--global--font--weight--body--default);
 }
 
+.provider-admin-billing__account-link.pf-v6-c-button:hover,
+.provider-admin-billing__account-link.pf-v6-c-button:focus,
 .provider-admin-billing__tenant-link:hover,
 .provider-admin-billing__tenant-link:focus {
   color: var(--pf-t--global--text--color--link--hover);
@@ -5722,8 +5751,14 @@ a.provider-admin-network-inventory__related-link:hover {
 
 .provider-admin-rate-cards__grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--pf-t--global--spacer--md);
+}
+
+@media (max-width: 1200px) {
+  .provider-admin-rate-cards__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 768px) {

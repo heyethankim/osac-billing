@@ -220,6 +220,14 @@ select.pf-v6-c-form-control {
   color: var(--pf-t--global--text--color--subtle);
 }
 
+.billing-m360-rate-status__label-link.pf-v6-c-button {
+  padding: 0;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  vertical-align: baseline;
+}
+
 .billing-launch-cost-panel {
   display: flex;
   flex-wrap: wrap;
@@ -245,8 +253,7 @@ select.pf-v6-c-form-control {
   font-weight: var(--pf-t--global--font--weight--heading--heading);
 }
 
-.provider-admin-billing__summary,
-.provider-admin-billing__table-card {
+.provider-admin-billing__summary {
   margin-block-start: var(--pf-t--global--spacer--lg);
 }
 
