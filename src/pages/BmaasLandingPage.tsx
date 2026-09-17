@@ -156,7 +156,6 @@ export function BmaasLandingPage() {
     {
       label: 'M360 billing account',
       to: '/m360/accounts',
-      external: true,
     },
   ]
 

@@ -1,5 +1,6 @@
+import { ExternalLinkAltIcon } from '@patternfly/react-icons/dist/esm/icons/external-link-alt-icon'
 import type { ReactNode } from 'react'
-import { ExternalLinkButton } from '../shared/ExternalLinkButton'
+import { RouterButton } from '../RouterButton'
 
 type M360BillingAccountLinkProps = {
   to: string
@@ -13,8 +14,15 @@ export function M360BillingAccountLink({
   className,
 }: M360BillingAccountLinkProps) {
   return (
-    <ExternalLinkButton href={to} className={className} iconPosition="end">
+    <RouterButton
+      variant="link"
+      isInline
+      to={to}
+      className={className}
+      icon={<ExternalLinkAltIcon aria-hidden />}
+      iconPosition="end"
+    >
       {children}
-    </ExternalLinkButton>
+    </RouterButton>
   )
 }

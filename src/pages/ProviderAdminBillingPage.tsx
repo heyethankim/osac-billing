@@ -30,7 +30,7 @@ import {
 } from '../billing/m360Accounts'
 import { M360BillingAccountLink } from '../components/billing/M360BillingAccountLink'
 import { ProviderAdminWorkspacePageHeader } from '../components/provider-admin/ProviderAdminWorkspacePageHeader'
-import { ExternalLinkButton } from '../components/shared/ExternalLinkButton'
+import { RouterButton } from '../components/RouterButton'
 import type { RegisteredOrganization } from '../providerAdmin/organizations'
 import { getProviderRegisteredOrganizations } from '../providerSetup/storage'
 import { buildProviderOrganizationWorkspacePath } from '../shared/workspaceNavUrl'
@@ -82,9 +82,9 @@ export function ProviderAdminBillingPage() {
         title="Billing"
         lede="Billing accounts live in M360. OSAC reads status here to gate tenant onboarding and catalog publish."
         action={
-          <ExternalLinkButton href={M360_ACCOUNTS_PATH} variant="primary">
+          <RouterButton to={M360_ACCOUNTS_PATH} variant="primary">
             Open M360 accounts
-          </ExternalLinkButton>
+          </RouterButton>
         }
       />
 

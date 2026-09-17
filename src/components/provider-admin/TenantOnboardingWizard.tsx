@@ -28,7 +28,7 @@ import {
   WizardStep,
   useWizardContext,
 } from '@patternfly/react-core'
-import { ExternalLinkButton } from '../shared/ExternalLinkButton'
+import { RouterButton } from '../RouterButton'
 import type { ProviderCatalogDraft } from '../../providerSetup/storage'
 import {
   BLUESOLACE_ONBOARDING_M360_ACCOUNT_NAME,
@@ -691,11 +691,13 @@ export function TenantOnboardingWizard({
             before you can link billing.
             <div className="tenant-onboarding__matched-account">
               <strong>{getM360AccountTenantName(selectedAccount)}</strong>
-              <ExternalLinkButton
-                href={buildM360AccountDetailPath(getM360AccountTenantName(selectedAccount))}
+              <RouterButton
+                variant="link"
+                isInline
+                to={buildM360AccountDetailPath(getM360AccountTenantName(selectedAccount))}
               >
                 Open M360 accounts
-              </ExternalLinkButton>
+              </RouterButton>
             </div>
           </Alert>
         ) : null}
@@ -711,9 +713,9 @@ export function TenantOnboardingWizard({
             billing accounts are inactive. Check M360 accounts before continuing.
             <div className="tenant-onboarding__matched-account">
               <strong>{selectedAccountName}</strong>
-              <ExternalLinkButton href={M360_ACCOUNTS_PATH}>
+              <RouterButton variant="link" isInline to={M360_ACCOUNTS_PATH}>
                 Open M360 accounts
-              </ExternalLinkButton>
+              </RouterButton>
             </div>
           </Alert>
         ) : null}
@@ -752,9 +754,9 @@ export function TenantOnboardingWizard({
             </EmptyStateBody>
             <EmptyStateFooter>
               <EmptyStateActions>
-                <ExternalLinkButton variant="primary" href={M360_ACCOUNTS_PATH}>
+                <RouterButton variant="primary" to={M360_ACCOUNTS_PATH}>
                   Create billing account in M360
-                </ExternalLinkButton>
+                </RouterButton>
                 <Button
                   variant="link"
                   icon={<RedoIcon aria-hidden />}
@@ -878,9 +880,9 @@ export function TenantOnboardingWizard({
                   </Content>
                 </div>
                 <div className="tenant-onboarding__account-hint-actions">
-                  <ExternalLinkButton href={M360_ACCOUNTS_PATH}>
+                  <RouterButton variant="link" isInline to={M360_ACCOUNTS_PATH}>
                     Open M360 accounts
-                  </ExternalLinkButton>
+                  </RouterButton>
                   <Button
                     variant="link"
                     isInline
