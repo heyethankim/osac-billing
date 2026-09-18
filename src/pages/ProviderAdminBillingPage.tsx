@@ -63,46 +63,45 @@ function findOrganizationForM360Account(
   )
 }
 
-function isLinkedOsacTenantAccount(
-  account: M360BillingAccount,
-  organizations: RegisteredOrganization[],
-): boolean {
-  const linkedOrganization = findOrganizationForM360Account(account, organizations)
-  if (!linkedOrganization) {
-    return false
-  }
-
-  return (
-    linkedOrganization.billingAccountLinked === true ||
-    linkedOrganization.m360ConnectionStatus === 'connected' ||
-    Boolean(account.externalId?.trim() || account.linkedTenantSlug?.trim())
-  )
+function isLinkedOsacTenantAccount(account: M360BillingAccount): boolean {
+  return Boolean(account.externalId?.trim() || account.linkedTenantSlug?.trim())
 }
 
 export function ProviderAdminBillingPage() {
   const organizations = useMemo(() => getProviderRegisteredOrganizations(), [])
-  const linkedAccounts = useMemo(() => {
-    return listM360PortalAccounts().filter((account) =>
-      isLinkedOsacTenantAccount(account, organizations),
-    )
-  }, [organizations])
-  const activeCount = linkedAccounts.filter(
-    (account) => account.accountStatus === 'Active',
-  ).length
-  const inactiveCount = linkedAccounts.filter(
-    (account) => account.accountStatus === 'Inactive',
-  ).length
-  const linkedCount = linkedAccounts.length
-  const inactiveAccounts = linkedAccounts.filter(
-    (account) => account.accountStatus === 'Inactive',
+  const m360Accounts = useMemo(() => listM360PortalAccounts(), [])
+  const linkedAccounts = useMemo(
+    () =>
+      m360Accounts
+        .filter(isLinkedOsacTenantAccount)
+        .sort((left, right) =>
+          getM360AccountTenantName(left).localeCompare(getM360AccountTenantName(right)),
+        ),
+    [m360Accounts],
   )
+  const activeAccounts = useMemo(
+    () => m360Accounts.filter((account) => account.accountStatus === 'Active'),
+    [m360Accounts],
+  )
+  const inactiveAccounts = useMemo(
+    () =>
+      m360Accounts
+        .filter((account) => account.accountStatus === 'Inactive')
+        .sort((left, right) =>
+          getM360AccountTenantName(left).localeCompare(getM360AccountTenantName(right)),
+        ),
+    [m360Accounts],
+  )
+  const activeCount = activeAccounts.length
+  const inactiveCount = inactiveAccounts.length
+  const linkedCount = linkedAccounts.length
 
   return (
     <div className="provider-admin-workspace-page provider-admin-billing">
       <ProviderAdminWorkspacePageHeader
         kicker="Administration"
         title="Billing"
-        lede="Only M360 billing accounts linked to OSAC tenants are listed here. Open M360 for the full account catalog."
+        lede="Account status comes from M360. Linked tenants are M360 accounts with an External ID set for OSAC."
         action={
           <RouterButton
             to={M360_ACCOUNTS_PATH}
@@ -126,7 +125,7 @@ export function ProviderAdminBillingPage() {
           <CardHeader>
             <CardTitle>
               <CheckCircleIcon className="provider-admin-billing__kpi-icon" aria-hidden />
-              Active linked accounts
+              Active M360 accounts
             </CardTitle>
           </CardHeader>
           <CardBody>
@@ -134,7 +133,7 @@ export function ProviderAdminBillingPage() {
               {activeCount}
             </Title>
             <Content component="p" className="provider-admin-billing__kpi-hint">
-              Linked OSAC tenants with an active M360 account
+              Accounts with Active status in M360
             </Content>
           </CardBody>
         </Card>
@@ -151,7 +150,7 @@ export function ProviderAdminBillingPage() {
               {linkedCount}
             </Title>
             <Content component="p" className="provider-admin-billing__kpi-hint">
-              Tenants with an M360 billing account linked in OSAC
+              M360 accounts with an External ID linked to OSAC
             </Content>
           </CardBody>
         </Card>
@@ -168,7 +167,7 @@ export function ProviderAdminBillingPage() {
           <CardHeader>
             <CardTitle>
               <ExclamationTriangleIcon className="provider-admin-billing__kpi-icon" aria-hidden />
-              Inactive linked accounts
+              Inactive M360 accounts
             </CardTitle>
           </CardHeader>
           <CardBody>
@@ -205,7 +204,7 @@ export function ProviderAdminBillingPage() {
               </Content>
             ) : (
               <Content component="p" className="provider-admin-billing__kpi-hint">
-                No inactive linked accounts
+                No inactive M360 accounts
               </Content>
             )}
           </CardBody>
@@ -239,8 +238,8 @@ export function ProviderAdminBillingPage() {
 
           {linkedAccounts.length === 0 ? (
             <Content component="p" className="provider-admin-billing__empty">
-              No OSAC tenants are linked to an M360 billing account yet. Link an account during
-              tenant onboarding, or open M360 accounts to manage unlinked accounts.
+              No M360 accounts have an External ID linked to OSAC yet. Link an account during
+              tenant onboarding, or open M360 accounts to manage linking.
             </Content>
           ) : (
             <Table
