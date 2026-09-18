@@ -149,15 +149,6 @@ export function BmaasLandingPage() {
       to: '/provider/workspace?nav=administration-organizations',
       companionSeparator: ', ',
       companionLink: {
-        label: 'Billing',
-        to: '/provider/workspace?nav=administration-billing',
-      },
-    },
-    {
-      label: 'Rates',
-      to: '/provider/workspace?nav=administration-rate-cards',
-      companionSeparator: ', ',
-      companionLink: {
         label: 'M360 billing account',
         to: '/m360/accounts',
       },
