@@ -149,6 +149,15 @@ export function BmaasLandingPage() {
       to: '/provider/workspace?nav=administration-organizations',
       companionSeparator: ', ',
       companionLink: {
+        label: 'Billing',
+        to: '/provider/workspace?nav=administration-billing',
+      },
+    },
+    {
+      label: 'Rates',
+      to: '/provider/workspace?nav=administration-rate-cards',
+      companionSeparator: ', ',
+      companionLink: {
         label: 'M360 billing account',
         to: '/m360/accounts',
       },
@@ -159,7 +168,8 @@ export function BmaasLandingPage() {
     {
       id: 'bmaas-landing-role-provider-title',
       title: 'Provider Admin',
-      description: 'Register tenants and link M360 billing accounts. One flat M360 rate card prices all tenants.',
+      description:
+        'Register tenants, link M360 billing accounts, and browse rates synced from M360.',
       icon: <CrownIcon />,
       actions: <SingleEnterActions to="/provider" ariaLabel="Enter Provider Admin demo" />,
       prototypeLinks: providerPrototypeLinks,
@@ -211,7 +221,7 @@ export function BmaasLandingPage() {
           >
             <Brand src={redHatHatLogoUrl} alt="Red Hat" heights={{ default: '52px' }} />
             <Title headingLevel="h1" size="4xl">
-              Red Hat OSAC Billing Prototypes 0.3
+              Red Hat OSAC Billing Prototypes 0.4
             </Title>
             <Content component="p">Select a role to access the customized interface.</Content>
           </Flex>
