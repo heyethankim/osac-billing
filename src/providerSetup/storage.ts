@@ -936,6 +936,7 @@ export function patchProviderCatalogItem(
       | 'hostTypeId'
       | 'hostTypeLabel'
       | 'clusterNodeTopologyMode'
+      | 'rateCard'
     >
   >,
 ): ProviderCatalogDraft | null {

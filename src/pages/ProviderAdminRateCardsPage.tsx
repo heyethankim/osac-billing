@@ -16,6 +16,7 @@ import { M360_RATE_CARD_PORTAL_URL } from '../billing/m360'
 import {
   DEFAULT_M360_RATE_CARD_ID,
   listM360RatesPageServiceGroups,
+  type M360BillableService,
   type M360RatesPageServiceGroup,
 } from '../billing/m360RateLines'
 import { ProviderAdminWorkspacePageHeader } from '../components/provider-admin/ProviderAdminWorkspacePageHeader'
@@ -85,7 +86,7 @@ export function ProviderAdminRateCardsPage() {
     () => listM360RatesPageServiceGroups(catalogItems, DEFAULT_M360_RATE_CARD_ID),
     [catalogItems],
   )
-  const [activeServiceId, setActiveServiceId] = useState(
+  const [activeServiceId, setActiveServiceId] = useState<M360BillableService>(
     () => serviceGroups[0]?.serviceId ?? 'baremetal',
   )
   const activeGroup =
@@ -118,7 +119,9 @@ export function ProviderAdminRateCardsPage() {
           ) : (
             <Tabs
               activeKey={activeGroup?.serviceId}
-              onSelect={(_event, eventKey) => setActiveServiceId(String(eventKey))}
+              onSelect={(_event, eventKey) => {
+                setActiveServiceId(String(eventKey) as M360BillableService)
+              }}
               aria-label="Rate line services"
               className="provider-admin-rate-cards__service-tabs"
             >
