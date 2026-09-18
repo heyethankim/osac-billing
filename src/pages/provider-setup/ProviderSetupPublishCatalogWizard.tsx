@@ -73,6 +73,7 @@ import {
   getCatalogClusterVersionModeLabel,
   getCatalogClusterVersionOptions,
   getCatalogHardwareOsModeLabel,
+  getCatalogOsImageModeLabel,
   getLatestCatalogClusterVersionId,
   getCatalogDiskImageOptions,
   getCatalogInstanceTypeOptions,
@@ -83,11 +84,13 @@ import {
   resolveCatalogClusterNodeTopologyMode,
   resolveCatalogClusterVersionMode,
   resolveCatalogHardwareOsMode,
+  resolveCatalogOsImageMode,
   type CatalogClusterNodeTopologyMode,
   type CatalogClusterVersionMode,
   type CatalogClusterVersionOption,
   type CatalogFieldPolicy,
   type CatalogHardwareOsMode,
+  type CatalogOsImageMode,
   type CustomInstanceTypeConfig,
 } from '../../catalog/catalogPublishConfig'
 import {
@@ -105,7 +108,6 @@ import {
   getCatalogServiceOffering,
   getPublishCatalogSuggestedDisplayName,
   getPublishCatalogSuggestedDescription,
-  formatRateCardSummary,
   resolveRateCard,
   PUBLISH_CATALOG_STEPS,
   type CatalogServiceId,
@@ -113,9 +115,123 @@ import {
   type PublishedTemplatePayload,
   type SavedMasterTemplate,
 } from '../../providerSetup/templateDemo'
-import { isTemplateM360RateConfigured } from '../../billing/m360'
+import {
+  DEFAULT_M360_RATE_CARD_ID,
+  clusterComposedRateToRateCard,
+  deriveClusterInstanceTypeId,
+  findM360RateLineForPublishSelection,
+  formatClusterComposedRateBreakdown,
+  formatClusterComposedRateSummary,
+  formatClusterComposedWorkerLineLabel,
+  formatM360RateLineSummary,
+  getM360RateCardDisplayName,
+  mapClusterHostTypeToBareMetalInstanceType,
+  m360RateLineToRateCard,
+  resolveClusterComposedRateEstimate,
+} from '../../billing/m360RateLines'
 import type { ProviderCatalogDraft } from '../../providerSetup/storage'
 import { getCatalogItemStatus } from '../../providerSetup/storage'
+
+function TenantAccessModeCards({
+  fieldId,
+  label,
+  value,
+  onChange,
+  previous,
+}: {
+  fieldId: string
+  label: string
+  value: 'locked' | 'editable'
+  onChange: (mode: 'locked' | 'editable') => void
+  previous?: string | null
+}) {
+  return (
+    <FormGroup
+      label={label}
+      fieldId={fieldId}
+      className="provider-setup-template__publish-subsection"
+    >
+      {previous !== undefined ? <CatalogEditPreviousValue previous={previous} /> : null}
+      <div
+        id={fieldId}
+        className="provider-setup-template__cluster-version-mode-options"
+        role="radiogroup"
+        aria-label={label}
+      >
+        <button
+          type="button"
+          role="radio"
+          aria-checked={value === 'locked'}
+          className={`provider-setup-template__cluster-version-mode-card${
+            value === 'locked' ? ' provider-setup-template__cluster-version-mode-card--selected' : ''
+          }`}
+          onClick={() => onChange('locked')}
+        >
+          {value === 'locked' ? (
+            <Label
+              color="grey"
+              isCompact
+              className="provider-setup-template__select-card-selected-badge"
+            >
+              Selected
+            </Label>
+          ) : null}
+          <span className="provider-setup-template__cluster-version-mode-icon" aria-hidden>
+            <LockIcon />
+          </span>
+          <span className="provider-setup-template__cluster-version-mode-copy">
+            <Title
+              headingLevel="h3"
+              size="md"
+              className="provider-setup-template__select-card-title"
+            >
+              Locked
+            </Title>
+            <Content component="p" className="provider-setup-template__select-card-detail">
+              Tenants cannot change it.
+            </Content>
+          </span>
+        </button>
+        <button
+          type="button"
+          role="radio"
+          aria-checked={value === 'editable'}
+          className={`provider-setup-template__cluster-version-mode-card${
+            value === 'editable'
+              ? ' provider-setup-template__cluster-version-mode-card--selected'
+              : ''
+          }`}
+          onClick={() => onChange('editable')}
+        >
+          {value === 'editable' ? (
+            <Label
+              color="grey"
+              isCompact
+              className="provider-setup-template__select-card-selected-badge"
+            >
+              Selected
+            </Label>
+          ) : null}
+          <span className="provider-setup-template__cluster-version-mode-icon" aria-hidden>
+            <UnlockIcon />
+          </span>
+          <span className="provider-setup-template__cluster-version-mode-copy">
+            <Title
+              headingLevel="h3"
+              size="md"
+              className="provider-setup-template__select-card-title"
+            >
+              Editable at provisioning
+            </Title>
+            <Content component="p" className="provider-setup-template__select-card-detail">
+              Tenants can change at launch.
+            </Content>
+          </span>
+        </button>
+      </div>
+    </FormGroup>
+  )
+}
 
 type ProviderSetupPublishCatalogWizardProps = {
   isOpen: boolean
@@ -259,6 +375,7 @@ export function ProviderSetupPublishCatalogWizard({
   const [clusterVersionMode, setClusterVersionMode] =
     useState<CatalogClusterVersionMode>('locked')
   const [hardwareOsMode, setHardwareOsMode] = useState<CatalogHardwareOsMode>('locked')
+  const [osImageMode, setOsImageMode] = useState<CatalogOsImageMode>('locked')
   const [selectedNodeSetId, setSelectedNodeSetId] = useState(DEFAULT_CLUSTER_NODE_SET_ID)
   const [selectedHostTypeId, setSelectedHostTypeId] = useState(DEFAULT_CLUSTER_HOST_TYPE_ID)
   const [clusterNodeTopologyMode, setClusterNodeTopologyMode] =
@@ -325,8 +442,7 @@ export function ProviderSetupPublishCatalogWizard({
           (selectedDiskImage as CatalogClusterVersionOption).lifecycle,
         )
       : null
-  const softwareImageStepLabel = isClusterService ? 'Cluster version' : 'Disk image'
-  const hardwareOsStepLabel = isClusterService ? 'Cluster version' : 'Hardware & OS'
+  const softwareImageStepLabel = isClusterService ? 'Cluster version' : 'OS'
   const latestClusterVersionId = isClusterService ? getLatestCatalogClusterVersionId() : ''
   const isVipEnterprise = publishScope === 'vip-enterprise'
   const selectedVipOrganizations = useMemo(
@@ -359,6 +475,7 @@ export function ProviderSetupPublishCatalogWizard({
         diskImageLabel: currentDiskImageLabel,
         clusterVersionMode,
         hardwareOsMode,
+        osImageMode,
         nodeSetId: selectedNodeSetId,
         hostTypeId: selectedHostTypeId,
         clusterNodeTopologyMode,
@@ -373,6 +490,7 @@ export function ProviderSetupPublishCatalogWizard({
     clusterNodeTopologyMode,
     clusterVersionMode,
     hardwareOsMode,
+    osImageMode,
     currentDiskImageLabel,
     description,
     displayName,
@@ -407,9 +525,66 @@ export function ProviderSetupPublishCatalogWizard({
     getCatalogEditPreviousValue(editBaseline, fieldId, currentEditSnapshot)
   const isEditingLiveCatalog =
     isEditMode && editingCatalog ? getCatalogItemStatus(editingCatalog) === 'live' : false
-  const templateRateConfigured = selectedTemplate
-    ? isTemplateM360RateConfigured(selectedTemplate.templateRefId)
-    : true
+  const resolvedM360RateLine = useMemo(() => {
+    if (isClusterService) {
+      return null
+    }
+    if (!selectedServiceId || !selectedInstanceTypeId || isCustomInstanceTypeSelected) {
+      return null
+    }
+
+    return findM360RateLineForPublishSelection(
+      selectedServiceId,
+      selectedInstanceTypeId,
+      DEFAULT_M360_RATE_CARD_ID,
+    )
+  }, [
+    isClusterService,
+    isCustomInstanceTypeSelected,
+    selectedInstanceTypeId,
+    selectedServiceId,
+  ])
+  const resolvedClusterComposedRate = useMemo(() => {
+    if (!isClusterService || !selectedNodeSetId || !selectedHostTypeId) {
+      return null
+    }
+
+    return resolveClusterComposedRateEstimate(
+      selectedNodeSetId,
+      selectedHostTypeId,
+      DEFAULT_M360_RATE_CARD_ID,
+    )
+  }, [isClusterService, selectedHostTypeId, selectedNodeSetId])
+  const m360RateConfigured = isClusterService
+    ? Boolean(resolvedClusterComposedRate)
+    : Boolean(resolvedM360RateLine)
+  const resolveInstanceTypeM360RateLabel = (instanceTypeId: string): string | null => {
+    if (!selectedServiceId || isCustomInstanceTypeId(instanceTypeId)) {
+      return null
+    }
+
+    const rateLine = findM360RateLineForPublishSelection(
+      selectedServiceId,
+      instanceTypeId,
+      DEFAULT_M360_RATE_CARD_ID,
+    )
+
+    return rateLine ? formatM360RateLineSummary(rateLine) : 'No M360 rate line'
+  }
+  const resolveClusterHostTypeM360RateLabel = (hostTypeId: string): string | null => {
+    const bareMetalInstanceTypeId = mapClusterHostTypeToBareMetalInstanceType(hostTypeId)
+    if (!bareMetalInstanceTypeId) {
+      return 'No rate'
+    }
+
+    const rateLine = findM360RateLineForPublishSelection(
+      'baremetal',
+      bareMetalInstanceTypeId,
+      DEFAULT_M360_RATE_CARD_ID,
+    )
+
+    return rateLine ? `$${rateLine.hourlyRate.toFixed(2)}/hr · per worker` : 'No rate'
+  }
   const canCreateCatalogItem =
     Boolean(selectedServiceId) &&
     Boolean(selectedTemplate) &&
@@ -417,7 +592,7 @@ export function ProviderSetupPublishCatalogWizard({
     Boolean(selectedDiskImage) &&
     (!isClusterService || (Boolean(selectedNodeSetId) && Boolean(selectedHostTypeId))) &&
     isValidKubernetesResourceName(displayName) &&
-    templateRateConfigured
+    m360RateConfigured
   const canSaveCatalogEdit = canCreateCatalogItem && (!isEditMode || editChanges.length > 0)
   const hasLockableParameters = fieldPolicies.length > 0
   const hasSingleTemplate = templates.length <= 1
@@ -430,6 +605,9 @@ export function ProviderSetupPublishCatalogWizard({
         if (step.id === 'template' && hasSingleTemplate) {
           return false
         }
+        if (step.id === 'hardware' && isClusterService) {
+          return false
+        }
         if (step.id === 'node-topology' && !isClusterService) {
           return false
         }
@@ -438,9 +616,11 @@ export function ProviderSetupPublishCatalogWizard({
         }
         return true
       }).map((step) =>
-        step.id === 'hardware-os' ? { ...step, label: hardwareOsStepLabel } : step,
+        step.id === 'os' && isClusterService
+          ? { ...step, label: 'Cluster version' }
+          : step,
       ),
-    [hasLockableParameters, hasSingleTemplate, hardwareOsStepLabel, hidePublishScope, isClusterService],
+    [hasLockableParameters, hasSingleTemplate, hidePublishScope, isClusterService],
   )
 
   const selectVipEnterprise = () => {
@@ -464,6 +644,7 @@ export function ProviderSetupPublishCatalogWizard({
     setSelectedDiskImageId('')
     setClusterVersionMode('locked')
     setHardwareOsMode('locked')
+    setOsImageMode('locked')
     setSelectedNodeSetId(DEFAULT_CLUSTER_NODE_SET_ID)
     setSelectedHostTypeId(DEFAULT_CLUSTER_HOST_TYPE_ID)
     setClusterNodeTopologyMode('locked')
@@ -597,6 +778,9 @@ export function ProviderSetupPublishCatalogWizard({
     }
     setClusterVersionMode(catalog.clusterVersionMode ?? 'locked')
     setHardwareOsMode(catalog.hardwareOsMode ?? 'locked')
+    setOsImageMode(
+      resolveCatalogOsImageMode(catalog.osImageMode, catalog.hardwareOsMode),
+    )
     setSelectedNodeSetId(catalog.nodeSetId ?? DEFAULT_CLUSTER_NODE_SET_ID)
     setSelectedHostTypeId(catalog.hostTypeId ?? DEFAULT_CLUSTER_HOST_TYPE_ID)
     setClusterNodeTopologyMode(catalog.clusterNodeTopologyMode ?? 'locked')
@@ -679,6 +863,7 @@ export function ProviderSetupPublishCatalogWizard({
       setSelectedDiskImageId('')
       setClusterVersionMode('locked')
       setHardwareOsMode('locked')
+      setOsImageMode('locked')
       setSelectedNodeSetId(DEFAULT_CLUSTER_NODE_SET_ID)
       setSelectedHostTypeId(DEFAULT_CLUSTER_HOST_TYPE_ID)
       setClusterNodeTopologyMode('locked')
@@ -710,10 +895,25 @@ export function ProviderSetupPublishCatalogWizard({
     setSelectedDiskImageId(nextSoftwareOptions[0]?.id ?? '')
     setClusterVersionMode('locked')
     setHardwareOsMode('locked')
+    setOsImageMode('locked')
     setSelectedNodeSetId(DEFAULT_CLUSTER_NODE_SET_ID)
     setSelectedHostTypeId(DEFAULT_CLUSTER_HOST_TYPE_ID)
     setClusterNodeTopologyMode('locked')
   }, [isEditMode, selectedServiceId])
+
+  useEffect(() => {
+    if (!isClusterService) {
+      return
+    }
+
+    const nextInstanceTypeId = deriveClusterInstanceTypeId(
+      selectedNodeSetId,
+      selectedHostTypeId,
+    )
+    setSelectedInstanceTypeId((current) =>
+      current === nextInstanceTypeId ? current : nextInstanceTypeId,
+    )
+  }, [isClusterService, selectedHostTypeId, selectedNodeSetId])
 
   useEffect(() => {
     if (!selectedServiceId || !selectedTemplate) {
@@ -803,6 +1003,13 @@ export function ProviderSetupPublishCatalogWizard({
     }
 
     const vipOrganizationIds = selectedVipOrganizations.map((organization) => organization.id)
+    const catalogRateCard = isClusterService
+      ? resolvedClusterComposedRate
+        ? clusterComposedRateToRateCard(resolvedClusterComposedRate)
+        : resolveRateCard(selectedTemplate)
+      : resolvedM360RateLine
+        ? m360RateLineToRateCard(resolvedM360RateLine)
+        : resolveRateCard(selectedTemplate)
 
     return {
       serviceId: selectedServiceId,
@@ -811,7 +1018,7 @@ export function ProviderSetupPublishCatalogWizard({
       displayName: displayName.trim(),
       description: description.trim(),
       scope: publishScope,
-      rateCard: resolveRateCard(selectedTemplate),
+      rateCard: catalogRateCard,
       instanceTypeId: selectedInstanceType.id,
       instanceTypeLabel: selectedInstanceTypeLabel,
       diskImageId: selectedDiskImage.id,
@@ -832,6 +1039,7 @@ export function ProviderSetupPublishCatalogWizard({
         : isBareMetalService
           ? {
               hardwareOsMode: resolveCatalogHardwareOsMode(hardwareOsMode),
+              osImageMode: resolveCatalogOsImageMode(osImageMode, hardwareOsMode),
             }
           : {}),
       fieldPolicies,
@@ -1123,9 +1331,9 @@ export function ProviderSetupPublishCatalogWizard({
                       <Divider className="provider-setup-template__select-card-footer-divider" />
                       <Content
                         component="p"
-                        className="provider-setup-template__select-card-rate"
+                        className="provider-setup-template__select-card-rate-hint"
                       >
-                        {formatRateCardSummary(resolveRateCard(template))}
+                        M360 rate is set from the instance type you choose next.
                       </Content>
                     </div>
                   </div>
@@ -1134,241 +1342,341 @@ export function ProviderSetupPublishCatalogWizard({
             </div>
           </div>
         )
-      case 'hardware-os':
+      case 'hardware':
+        return (
+          <div className="provider-setup-template__publish-hardware-step">
+            <Content component="p" className="provider-setup-template__publish-step-lede">
+              Choose tenant access and the instance type for this catalog item.
+            </Content>
+            {isBareMetalService ? (
+              <TenantAccessModeCards
+                fieldId="publish-catalog-hardware-mode"
+                label="Tenant access to hardware"
+                value={hardwareOsMode}
+                onChange={setHardwareOsMode}
+                previous={editPrevious('hardwareOsMode')}
+              />
+            ) : null}
+            <FormGroup
+              label={
+                isBareMetalService && hardwareOsMode === 'editable'
+                  ? 'Default instance type'
+                  : 'Instance type'
+              }
+              fieldId="publish-catalog-instance-type"
+              isRequired
+              role="radiogroup"
+              className="provider-setup-template__publish-subsection"
+            >
+              <CatalogEditPreviousValue previous={editPrevious('instanceType')} />
+              <div
+                id="publish-catalog-instance-type"
+                className={`provider-setup-template__card-group provider-setup-template__card-group--instance-types${
+                  instanceTypeCards.length === 3
+                    ? ' provider-setup-template__card-group--instance-types-fill'
+                    : ''
+                }`}
+                role="presentation"
+              >
+                {instanceTypeCards.map((option) => {
+                  const isSelected = option.id === selectedInstanceTypeId
+
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={isSelected}
+                      className={`provider-setup-template__select-card provider-setup-template__select-card--instance-type${
+                        isSelected ? ' provider-setup-template__select-card--selected' : ''
+                      }`}
+                      onClick={() => setSelectedInstanceTypeId(option.id)}
+                    >
+                      {isSelected ? (
+                        <Label
+                          color="grey"
+                          isCompact
+                          className="provider-setup-template__select-card-selected-badge"
+                        >
+                          Selected
+                        </Label>
+                      ) : null}
+                      <Title
+                        headingLevel="h3"
+                        size="md"
+                        className="provider-setup-template__select-card-title"
+                      >
+                        {option.label}
+                      </Title>
+                      <Content
+                        component="p"
+                        className="provider-setup-template__select-card-detail"
+                      >
+                        {option.detail}
+                      </Content>
+                      {option.accelerator ? (
+                        <Content
+                          component="p"
+                          className="provider-setup-template__select-card-accelerator"
+                        >
+                          {option.accelerator}
+                        </Content>
+                      ) : null}
+                      <Content
+                        component="p"
+                        className={`provider-setup-template__select-card-rate${
+                          isSelected ? ' provider-setup-template__select-card-rate--selected' : ''
+                        }`}
+                      >
+                        {resolveInstanceTypeM360RateLabel(option.id)}
+                      </Content>
+                    </button>
+                  )
+                })}
+              </div>
+            </FormGroup>
+            {isCustomInstanceTypeSelected && selectedServiceId === 'virtual-machine' ? (
+              <Form className="provider-setup-template__custom-instance-type">
+                <div className="provider-setup-template__custom-instance-type-fields">
+                  <FormGroup label="CPUs" fieldId="custom-instance-type-vcpus" isRequired>
+                    <CustomHardwareUnitNumberInput
+                      id="custom-instance-type-vcpus"
+                      value={customInstanceType.vcpus}
+                      min={1}
+                      max={128}
+                      unit="vCPU"
+                      onValueChange={(vcpus) =>
+                        setCustomInstanceType((current) => ({ ...current, vcpus }))
+                      }
+                      inputAriaLabel="CPUs"
+                      minusBtnAriaLabel="Decrease CPUs"
+                      plusBtnAriaLabel="Increase CPUs"
+                    />
+                  </FormGroup>
+                  <FormGroup label="Memory" fieldId="custom-instance-type-memory" isRequired>
+                    <CustomHardwareUnitNumberInput
+                      id="custom-instance-type-memory"
+                      value={customInstanceType.memoryGb}
+                      min={1}
+                      max={2048}
+                      unit="GB"
+                      onValueChange={(memoryGb) =>
+                        setCustomInstanceType((current) => ({ ...current, memoryGb }))
+                      }
+                      inputAriaLabel="Memory"
+                      minusBtnAriaLabel="Decrease memory"
+                      plusBtnAriaLabel="Increase memory"
+                    />
+                  </FormGroup>
+                  <FormGroup label="Network interfaces" fieldId="custom-instance-type-nics">
+                    <CustomHardwareUnitNumberInput
+                      id="custom-instance-type-nics"
+                      value={customInstanceType.networkInterfaces}
+                      min={1}
+                      max={16}
+                      unit="NIC"
+                      onValueChange={(networkInterfaces) =>
+                        setCustomInstanceType((current) => ({
+                          ...current,
+                          networkInterfaces,
+                        }))
+                      }
+                      inputAriaLabel="Network interfaces"
+                      minusBtnAriaLabel="Decrease network interfaces"
+                      plusBtnAriaLabel="Increase network interfaces"
+                    />
+                  </FormGroup>
+                  <FormGroup label="GPU accelerator" fieldId="custom-instance-type-gpu">
+                    <FormSelect
+                      id="custom-instance-type-gpu"
+                      value={customInstanceType.acceleratorId}
+                      onChange={(_event, value) =>
+                        setCustomInstanceType((current) => ({
+                          ...current,
+                          acceleratorId: value,
+                        }))
+                      }
+                      aria-label="GPU accelerator"
+                    >
+                      {CATALOG_GPU_ACCELERATOR_OPTIONS.map((option) => (
+                        <FormSelectOption
+                          key={option.id}
+                          value={option.id}
+                          label={option.label}
+                        />
+                      ))}
+                    </FormSelect>
+                  </FormGroup>
+                </div>
+              </Form>
+            ) : null}
+          </div>
+        )
+      case 'os':
         return (
           <div className="provider-setup-template__publish-hardware-step">
             <Content component="p" className="provider-setup-template__publish-step-lede">
               {isClusterService
                 ? 'Choose the OpenShift version for this catalog item.'
-                : isBareMetalService
-                  ? 'Choose tenant access, instance type, and disk image.'
-                  : 'Choose the hardware flavor and OS image for this catalog item.'}
+                : 'Choose tenant access and the OS image for this catalog item.'}
             </Content>
             {isClusterService ? (
-              <FormGroup
-                label="Tenant access to cluster version"
+              <TenantAccessModeCards
                 fieldId="publish-catalog-cluster-version-mode"
-                className="provider-setup-template__publish-subsection"
-              >
-                <CatalogEditPreviousValue previous={editPrevious('clusterVersionMode')} />
-                <div
-                  id="publish-catalog-cluster-version-mode"
-                  className="provider-setup-template__cluster-version-mode-options"
-                  role="radiogroup"
-                  aria-label="Tenant access to cluster version"
-                >
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={clusterVersionMode === 'locked'}
-                    className={`provider-setup-template__cluster-version-mode-card${
-                      clusterVersionMode === 'locked'
-                        ? ' provider-setup-template__cluster-version-mode-card--selected'
-                        : ''
-                    }`}
-                    onClick={() => setClusterVersionMode('locked')}
-                  >
-                    {clusterVersionMode === 'locked' ? (
-                      <Label
-                        color="grey"
-                        isCompact
-                        className="provider-setup-template__select-card-selected-badge"
-                      >
-                        Selected
-                      </Label>
-                    ) : null}
-                    <span
-                      className="provider-setup-template__cluster-version-mode-icon"
-                      aria-hidden
-                    >
-                      <LockIcon />
-                    </span>
-                    <span className="provider-setup-template__cluster-version-mode-copy">
-                      <Title
-                        headingLevel="h3"
-                        size="md"
-                        className="provider-setup-template__select-card-title"
-                      >
-                        Locked
-                      </Title>
-                      <Content
-                        component="p"
-                        className="provider-setup-template__select-card-detail"
-                      >
-                        Tenants cannot change it.
-                      </Content>
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={clusterVersionMode === 'editable'}
-                    className={`provider-setup-template__cluster-version-mode-card${
-                      clusterVersionMode === 'editable'
-                        ? ' provider-setup-template__cluster-version-mode-card--selected'
-                        : ''
-                    }`}
-                    onClick={() => setClusterVersionMode('editable')}
-                  >
-                    {clusterVersionMode === 'editable' ? (
-                      <Label
-                        color="grey"
-                        isCompact
-                        className="provider-setup-template__select-card-selected-badge"
-                      >
-                        Selected
-                      </Label>
-                    ) : null}
-                    <span
-                      className="provider-setup-template__cluster-version-mode-icon"
-                      aria-hidden
-                    >
-                      <UnlockIcon />
-                    </span>
-                    <span className="provider-setup-template__cluster-version-mode-copy">
-                      <Title
-                        headingLevel="h3"
-                        size="md"
-                        className="provider-setup-template__select-card-title"
-                      >
-                        Editable at provisioning
-                      </Title>
-                      <Content
-                        component="p"
-                        className="provider-setup-template__select-card-detail"
-                      >
-                        Tenants can change at launch.
-                      </Content>
-                    </span>
-                  </button>
-                </div>
-              </FormGroup>
+                label="Tenant access to cluster version"
+                value={clusterVersionMode}
+                onChange={setClusterVersionMode}
+                previous={editPrevious('clusterVersionMode')}
+              />
+            ) : isBareMetalService ? (
+              <TenantAccessModeCards
+                fieldId="publish-catalog-os-mode"
+                label="Tenant access to OS"
+                value={osImageMode}
+                onChange={setOsImageMode}
+                previous={editPrevious('osImageMode')}
+              />
             ) : null}
-            {!isClusterService ? (
-              <>
-                {isBareMetalService ? (
-                  <FormGroup
-                    label="Tenant access to hardware and OS"
-                    fieldId="publish-catalog-hardware-os-mode"
-                    className="provider-setup-template__publish-subsection"
-                  >
-                    <CatalogEditPreviousValue previous={editPrevious('hardwareOsMode')} />
-                    <div
-                      id="publish-catalog-hardware-os-mode"
-                      className="provider-setup-template__cluster-version-mode-options"
-                      role="radiogroup"
-                      aria-label="Tenant access to hardware and OS"
-                    >
-                      <button
-                        type="button"
-                        role="radio"
-                        aria-checked={hardwareOsMode === 'locked'}
-                        className={`provider-setup-template__cluster-version-mode-card${
-                          hardwareOsMode === 'locked'
-                            ? ' provider-setup-template__cluster-version-mode-card--selected'
-                            : ''
-                        }`}
-                        onClick={() => setHardwareOsMode('locked')}
-                      >
-                        {hardwareOsMode === 'locked' ? (
-                          <Label
-                            color="grey"
-                            isCompact
-                            className="provider-setup-template__select-card-selected-badge"
-                          >
-                            Selected
-                          </Label>
-                        ) : null}
-                        <span
-                          className="provider-setup-template__cluster-version-mode-icon"
-                          aria-hidden
+            <FormGroup
+              label={
+                isClusterService
+                  ? clusterVersionMode === 'editable'
+                    ? 'Default cluster version'
+                    : 'Cluster version'
+                  : isBareMetalService && osImageMode === 'editable'
+                    ? 'Default OS image'
+                    : softwareImageStepLabel
+              }
+              fieldId="publish-catalog-disk-image"
+              isRequired
+              role="radiogroup"
+              className="provider-setup-template__publish-subsection"
+            >
+              <CatalogEditPreviousValue previous={editPrevious('diskImage')} />
+              <div
+                id="publish-catalog-disk-image"
+                className="provider-setup-template__card-group provider-setup-template__card-group--disk-images"
+                role="presentation"
+              >
+                {isClusterService
+                  ? getCatalogClusterVersionOptions().map((option) => {
+                      const isSelected = option.id === selectedDiskImageId
+                      const isLatest = option.id === latestClusterVersionId
+                      const lifecycleMeta = getCatalogClusterVersionLifecycleMeta(option.lifecycle)
+                      const isFeaturesExpanded = expandedClusterVersionIds.has(option.id)
+                      const featuresToggleId = `cluster-version-features-toggle-${option.id}`
+                      const featuresContentId = `cluster-version-features-${option.id}`
+
+                      return (
+                        <div
+                          key={option.id}
+                          role="radio"
+                          tabIndex={0}
+                          aria-checked={isSelected}
+                          aria-label={isLatest ? `${option.label}, latest` : option.label}
+                          className={`provider-setup-template__select-card provider-setup-template__select-card--disk-image provider-setup-template__select-card--cluster-version${
+                            isSelected ? ' provider-setup-template__select-card--selected' : ''
+                          }`}
+                          onClick={() => setSelectedDiskImageId(option.id)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault()
+                              setSelectedDiskImageId(option.id)
+                            }
+                          }}
                         >
-                          <LockIcon />
-                        </span>
-                        <span className="provider-setup-template__cluster-version-mode-copy">
-                          <Title
-                            headingLevel="h3"
-                            size="md"
-                            className="provider-setup-template__select-card-title"
+                          {isSelected ? (
+                            <Label
+                              color="grey"
+                              isCompact
+                              className="provider-setup-template__select-card-selected-badge"
+                            >
+                              Selected
+                            </Label>
+                          ) : null}
+                          <div className="provider-setup-template__cluster-version-header">
+                            <div
+                              className="provider-setup-template__cluster-version-toggle-wrap"
+                              onClick={(event) => event.stopPropagation()}
+                              onKeyDown={(event) => event.stopPropagation()}
+                            >
+                              <ExpandableSectionToggle
+                                isDetached
+                                isExpanded={isFeaturesExpanded}
+                                toggleId={featuresToggleId}
+                                contentId={featuresContentId}
+                                toggleAriaLabel={
+                                  isFeaturesExpanded
+                                    ? `Hide features for ${option.label}`
+                                    : `Show features for ${option.label}`
+                                }
+                                className="provider-setup-template__cluster-version-expand"
+                                onToggle={(nextExpanded) => {
+                                  setExpandedClusterVersionIds((current) => {
+                                    const next = new Set(current)
+                                    if (nextExpanded) {
+                                      next.add(option.id)
+                                    } else {
+                                      next.delete(option.id)
+                                    }
+                                    return next
+                                  })
+                                }}
+                              />
+                            </div>
+                            <div className="provider-setup-template__cluster-version-meta">
+                              <div className="provider-setup-template__select-card-title-row">
+                                <Title
+                                  headingLevel="h3"
+                                  size="md"
+                                  className="provider-setup-template__select-card-title"
+                                >
+                                  {option.label}
+                                </Title>
+                                {isLatest ? (
+                                  <Label color="blue" isCompact>
+                                    Latest
+                                  </Label>
+                                ) : null}
+                                <Label color={lifecycleMeta.color} isCompact>
+                                  {lifecycleMeta.text}
+                                </Label>
+                              </div>
+                              <Content
+                                component="p"
+                                className="provider-setup-template__select-card-detail"
+                              >
+                                {option.detail}
+                              </Content>
+                            </div>
+                          </div>
+                          <div
+                            className="provider-setup-template__select-card-features"
+                            onClick={(event) => event.stopPropagation()}
+                            onKeyDown={(event) => event.stopPropagation()}
                           >
-                            Locked
-                          </Title>
-                          <Content
-                            component="p"
-                            className="provider-setup-template__select-card-detail"
-                          >
-                            Tenants cannot change it.
-                          </Content>
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        role="radio"
-                        aria-checked={hardwareOsMode === 'editable'}
-                        className={`provider-setup-template__cluster-version-mode-card${
-                          hardwareOsMode === 'editable'
-                            ? ' provider-setup-template__cluster-version-mode-card--selected'
-                            : ''
-                        }`}
-                        onClick={() => setHardwareOsMode('editable')}
-                      >
-                        {hardwareOsMode === 'editable' ? (
-                          <Label
-                            color="grey"
-                            isCompact
-                            className="provider-setup-template__select-card-selected-badge"
-                          >
-                            Selected
-                          </Label>
-                        ) : null}
-                        <span
-                          className="provider-setup-template__cluster-version-mode-icon"
-                          aria-hidden
-                        >
-                          <UnlockIcon />
-                        </span>
-                        <span className="provider-setup-template__cluster-version-mode-copy">
-                          <Title
-                            headingLevel="h3"
-                            size="md"
-                            className="provider-setup-template__select-card-title"
-                          >
-                            Editable at provisioning
-                          </Title>
-                          <Content
-                            component="p"
-                            className="provider-setup-template__select-card-detail"
-                          >
-                            Tenants can change at launch.
-                          </Content>
-                        </span>
-                      </button>
-                    </div>
-                  </FormGroup>
-                ) : null}
-                <FormGroup
-                  label={
-                    isBareMetalService && hardwareOsMode === 'editable'
-                      ? 'Default instance type'
-                      : 'Instance type'
-                  }
-                  fieldId="publish-catalog-instance-type"
-                  isRequired
-                  role="radiogroup"
-                  className="provider-setup-template__publish-subsection"
-                >
-                  <CatalogEditPreviousValue previous={editPrevious('instanceType')} />
-                  <div
-                    id="publish-catalog-instance-type"
-                    className={`provider-setup-template__card-group provider-setup-template__card-group--instance-types${
-                      instanceTypeCards.length === 3
-                        ? ' provider-setup-template__card-group--instance-types-fill'
-                        : ''
-                    }`}
-                    role="presentation"
-                  >
-                    {instanceTypeCards.map((option) => {
-                      const isSelected = option.id === selectedInstanceTypeId
+                            <ExpandableSection
+                              isDetached
+                              isExpanded={isFeaturesExpanded}
+                              isIndented
+                              toggleId={featuresToggleId}
+                              contentId={featuresContentId}
+                            >
+                              <List
+                                component={ListComponent.ul}
+                                className="provider-setup-template__cluster-version-feature-list"
+                              >
+                                {option.features.map((feature) => (
+                                  <ListItem key={feature}>{feature}</ListItem>
+                                ))}
+                              </List>
+                            </ExpandableSection>
+                          </div>
+                        </div>
+                      )
+                    })
+                  : softwareImageOptions.map((option) => {
+                      const isSelected = option.id === selectedDiskImageId
 
                       return (
                         <button
@@ -1376,10 +1684,10 @@ export function ProviderSetupPublishCatalogWizard({
                           type="button"
                           role="radio"
                           aria-checked={isSelected}
-                          className={`provider-setup-template__select-card provider-setup-template__select-card--instance-type${
+                          className={`provider-setup-template__select-card provider-setup-template__select-card--disk-image${
                             isSelected ? ' provider-setup-template__select-card--selected' : ''
                           }`}
-                          onClick={() => setSelectedInstanceTypeId(option.id)}
+                          onClick={() => setSelectedDiskImageId(option.id)}
                         >
                           {isSelected ? (
                             <Label
@@ -1403,292 +1711,10 @@ export function ProviderSetupPublishCatalogWizard({
                           >
                             {option.detail}
                           </Content>
-                          {option.accelerator ? (
-                            <Content
-                              component="p"
-                              className="provider-setup-template__select-card-accelerator"
-                            >
-                              {option.accelerator}
-                            </Content>
-                          ) : null}
-                          {option.hourlyRate ? (
-                            <Content
-                              component="p"
-                              className="provider-setup-template__select-card-rate"
-                            >
-                              {option.hourlyRate}
-                            </Content>
-                          ) : null}
                         </button>
                       )
                     })}
-                  </div>
-                </FormGroup>
-                {isCustomInstanceTypeSelected && selectedServiceId === 'virtual-machine' ? (
-                  <Form className="provider-setup-template__custom-instance-type">
-                    <div className="provider-setup-template__custom-instance-type-fields">
-                      <FormGroup label="CPUs" fieldId="custom-instance-type-vcpus" isRequired>
-                        <CustomHardwareUnitNumberInput
-                          id="custom-instance-type-vcpus"
-                          value={customInstanceType.vcpus}
-                          min={1}
-                          max={128}
-                          unit="vCPU"
-                          onValueChange={(vcpus) =>
-                            setCustomInstanceType((current) => ({ ...current, vcpus }))
-                          }
-                          inputAriaLabel="CPUs"
-                          minusBtnAriaLabel="Decrease CPUs"
-                          plusBtnAriaLabel="Increase CPUs"
-                        />
-                      </FormGroup>
-                      <FormGroup
-                        label="Memory"
-                        fieldId="custom-instance-type-memory"
-                        isRequired
-                      >
-                        <CustomHardwareUnitNumberInput
-                          id="custom-instance-type-memory"
-                          value={customInstanceType.memoryGb}
-                          min={1}
-                          max={2048}
-                          unit="GB"
-                          onValueChange={(memoryGb) =>
-                            setCustomInstanceType((current) => ({ ...current, memoryGb }))
-                          }
-                          inputAriaLabel="Memory"
-                          minusBtnAriaLabel="Decrease memory"
-                          plusBtnAriaLabel="Increase memory"
-                        />
-                      </FormGroup>
-                      <FormGroup
-                        label="Network interfaces"
-                        fieldId="custom-instance-type-nics"
-                      >
-                        <CustomHardwareUnitNumberInput
-                          id="custom-instance-type-nics"
-                          value={customInstanceType.networkInterfaces}
-                          min={1}
-                          max={16}
-                          unit="NIC"
-                          onValueChange={(networkInterfaces) =>
-                            setCustomInstanceType((current) => ({
-                              ...current,
-                              networkInterfaces,
-                            }))
-                          }
-                          inputAriaLabel="Network interfaces"
-                          minusBtnAriaLabel="Decrease network interfaces"
-                          plusBtnAriaLabel="Increase network interfaces"
-                        />
-                      </FormGroup>
-                      <FormGroup
-                        label="GPU accelerator"
-                        fieldId="custom-instance-type-gpu"
-                      >
-                        <FormSelect
-                          id="custom-instance-type-gpu"
-                          value={customInstanceType.acceleratorId}
-                          onChange={(_event, value) =>
-                            setCustomInstanceType((current) => ({
-                              ...current,
-                              acceleratorId: value,
-                            }))
-                          }
-                          aria-label="GPU accelerator"
-                        >
-                          {CATALOG_GPU_ACCELERATOR_OPTIONS.map((option) => (
-                            <FormSelectOption
-                              key={option.id}
-                              value={option.id}
-                              label={option.label}
-                            />
-                          ))}
-                        </FormSelect>
-                      </FormGroup>
-                    </div>
-                  </Form>
-                ) : null}
-              </>
-            ) : null}
-            <FormGroup
-              label={
-                isClusterService
-                  ? clusterVersionMode === 'editable'
-                    ? 'Default cluster version'
-                    : 'Cluster version'
-                  : isBareMetalService && hardwareOsMode === 'editable'
-                    ? 'Default disk image'
-                    : softwareImageStepLabel
-              }
-              fieldId="publish-catalog-disk-image"
-              isRequired
-              role="radiogroup"
-              className="provider-setup-template__publish-subsection"
-            >
-              <CatalogEditPreviousValue previous={editPrevious('diskImage')} />
-            <div
-              id="publish-catalog-disk-image"
-              className="provider-setup-template__card-group provider-setup-template__card-group--disk-images"
-              role="presentation"
-            >
-              {isClusterService
-                ? getCatalogClusterVersionOptions().map((option) => {
-                    const isSelected = option.id === selectedDiskImageId
-                    const isLatest = option.id === latestClusterVersionId
-                    const lifecycleMeta = getCatalogClusterVersionLifecycleMeta(option.lifecycle)
-                    const isFeaturesExpanded = expandedClusterVersionIds.has(option.id)
-                    const featuresToggleId = `cluster-version-features-toggle-${option.id}`
-                    const featuresContentId = `cluster-version-features-${option.id}`
-
-                    return (
-                      <div
-                        key={option.id}
-                        role="radio"
-                        tabIndex={0}
-                        aria-checked={isSelected}
-                        aria-label={isLatest ? `${option.label}, latest` : option.label}
-                        className={`provider-setup-template__select-card provider-setup-template__select-card--disk-image provider-setup-template__select-card--cluster-version${
-                          isSelected ? ' provider-setup-template__select-card--selected' : ''
-                        }`}
-                        onClick={() => setSelectedDiskImageId(option.id)}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter' || event.key === ' ') {
-                            event.preventDefault()
-                            setSelectedDiskImageId(option.id)
-                          }
-                        }}
-                      >
-                        {isSelected ? (
-                          <Label
-                            color="grey"
-                            isCompact
-                            className="provider-setup-template__select-card-selected-badge"
-                          >
-                            Selected
-                          </Label>
-                        ) : null}
-                        <div className="provider-setup-template__cluster-version-header">
-                          <div
-                            className="provider-setup-template__cluster-version-toggle-wrap"
-                            onClick={(event) => event.stopPropagation()}
-                            onKeyDown={(event) => event.stopPropagation()}
-                          >
-                            <ExpandableSectionToggle
-                              isDetached
-                              isExpanded={isFeaturesExpanded}
-                              toggleId={featuresToggleId}
-                              contentId={featuresContentId}
-                              toggleAriaLabel={
-                                isFeaturesExpanded
-                                  ? `Hide features for ${option.label}`
-                                  : `Show features for ${option.label}`
-                              }
-                              className="provider-setup-template__cluster-version-expand"
-                              onToggle={(nextExpanded) => {
-                                setExpandedClusterVersionIds((current) => {
-                                  const next = new Set(current)
-                                  if (nextExpanded) {
-                                    next.add(option.id)
-                                  } else {
-                                    next.delete(option.id)
-                                  }
-                                  return next
-                                })
-                              }}
-                            />
-                          </div>
-                          <div className="provider-setup-template__cluster-version-meta">
-                            <div className="provider-setup-template__select-card-title-row">
-                              <Title
-                                headingLevel="h3"
-                                size="md"
-                                className="provider-setup-template__select-card-title"
-                              >
-                                {option.label}
-                              </Title>
-                              {isLatest ? (
-                                <Label color="blue" isCompact>
-                                  Latest
-                                </Label>
-                              ) : null}
-                              <Label color={lifecycleMeta.color} isCompact>
-                                {lifecycleMeta.text}
-                              </Label>
-                            </div>
-                            <Content
-                              component="p"
-                              className="provider-setup-template__select-card-detail"
-                            >
-                              {option.detail}
-                            </Content>
-                          </div>
-                        </div>
-                        <div
-                          className="provider-setup-template__select-card-features"
-                          onClick={(event) => event.stopPropagation()}
-                          onKeyDown={(event) => event.stopPropagation()}
-                        >
-                          <ExpandableSection
-                            isDetached
-                            isExpanded={isFeaturesExpanded}
-                            isIndented
-                            toggleId={featuresToggleId}
-                            contentId={featuresContentId}
-                          >
-                            <List
-                              component={ListComponent.ul}
-                              className="provider-setup-template__cluster-version-feature-list"
-                            >
-                              {option.features.map((feature) => (
-                                <ListItem key={feature}>{feature}</ListItem>
-                              ))}
-                            </List>
-                          </ExpandableSection>
-                        </div>
-                      </div>
-                    )
-                  })
-                : softwareImageOptions.map((option) => {
-                    const isSelected = option.id === selectedDiskImageId
-
-                    return (
-                      <button
-                        key={option.id}
-                        type="button"
-                        role="radio"
-                        aria-checked={isSelected}
-                        className={`provider-setup-template__select-card provider-setup-template__select-card--disk-image${
-                          isSelected ? ' provider-setup-template__select-card--selected' : ''
-                        }`}
-                        onClick={() => setSelectedDiskImageId(option.id)}
-                      >
-                        {isSelected ? (
-                          <Label
-                            color="grey"
-                            isCompact
-                            className="provider-setup-template__select-card-selected-badge"
-                          >
-                            Selected
-                          </Label>
-                        ) : null}
-                        <Title
-                          headingLevel="h3"
-                          size="md"
-                          className="provider-setup-template__select-card-title"
-                        >
-                          {option.label}
-                        </Title>
-                        <Content
-                          component="p"
-                          className="provider-setup-template__select-card-detail"
-                        >
-                          {option.detail}
-                        </Content>
-                      </button>
-                    )
-                  })}
-            </div>
+              </div>
             </FormGroup>
           </div>
         )
@@ -1696,8 +1722,7 @@ export function ProviderSetupPublishCatalogWizard({
         return (
           <div className="provider-setup-template__publish-hardware-step">
             <Content component="p" className="provider-setup-template__publish-step-lede">
-              Set default node sets and host types. Tenants can adjust them at launch when topology
-              is editable.
+              Choose the default worker pool and host type.
             </Content>
             <FormGroup
               label="Tenant access to node topology"
@@ -1749,7 +1774,7 @@ export function ProviderSetupPublishCatalogWizard({
                       component="p"
                       className="provider-setup-template__select-card-detail"
                     >
-                      Tenants cannot change it.
+                      Fixed at launch
                     </Content>
                   </span>
                 </button>
@@ -1785,13 +1810,13 @@ export function ProviderSetupPublishCatalogWizard({
                       size="md"
                       className="provider-setup-template__select-card-title"
                     >
-                      Editable at provisioning
+                      Editable
                     </Title>
                     <Content
                       component="p"
                       className="provider-setup-template__select-card-detail"
                     >
-                      Tenants can change at launch.
+                      Changeable at launch
                     </Content>
                   </span>
                 </button>
@@ -1810,7 +1835,7 @@ export function ProviderSetupPublishCatalogWizard({
               <CatalogEditPreviousValue previous={editPrevious('nodeSet')} />
               <div
                 id="publish-catalog-cluster-node-set"
-                className="provider-setup-template__card-group provider-setup-template__card-group--disk-images"
+                className="provider-setup-template__card-group provider-setup-template__card-group--instance-types provider-setup-template__card-group--instance-types-fill"
                 role="presentation"
               >
                 {getCatalogClusterNodeSetOptions().map((option) => {
@@ -1821,7 +1846,7 @@ export function ProviderSetupPublishCatalogWizard({
                       type="button"
                       role="radio"
                       aria-checked={isSelected}
-                      className={`provider-setup-template__select-card provider-setup-template__select-card--disk-image${
+                      className={`provider-setup-template__select-card provider-setup-template__select-card--instance-type${
                         isSelected ? ' provider-setup-template__select-card--selected' : ''
                       }`}
                       onClick={() => setSelectedNodeSetId(option.id)}
@@ -1866,7 +1891,7 @@ export function ProviderSetupPublishCatalogWizard({
               <CatalogEditPreviousValue previous={editPrevious('hostType')} />
               <div
                 id="publish-catalog-cluster-host-type"
-                className="provider-setup-template__card-group provider-setup-template__card-group--disk-images"
+                className="provider-setup-template__card-group provider-setup-template__card-group--instance-types provider-setup-template__card-group--instance-types-fill"
                 role="presentation"
               >
                 {getCatalogClusterHostTypeOptions().map((option) => {
@@ -1877,7 +1902,7 @@ export function ProviderSetupPublishCatalogWizard({
                       type="button"
                       role="radio"
                       aria-checked={isSelected}
-                      className={`provider-setup-template__select-card provider-setup-template__select-card--disk-image${
+                      className={`provider-setup-template__select-card provider-setup-template__select-card--instance-type${
                         isSelected ? ' provider-setup-template__select-card--selected' : ''
                       }`}
                       onClick={() => setSelectedHostTypeId(option.id)}
@@ -1904,11 +1929,103 @@ export function ProviderSetupPublishCatalogWizard({
                       >
                         {option.detail}
                       </Content>
+                      <Content
+                        component="p"
+                        className={`provider-setup-template__select-card-rate${
+                          isSelected ? ' provider-setup-template__select-card-rate--selected' : ''
+                        }`}
+                      >
+                        {resolveClusterHostTypeM360RateLabel(option.id)}
+                      </Content>
                     </button>
                   )
                 })}
               </div>
             </FormGroup>
+
+            <div
+              className="provider-setup-template__cluster-estimate"
+              aria-live="polite"
+            >
+              {resolvedClusterComposedRate ? (
+                <>
+                  <div className="provider-setup-template__cluster-estimate-header">
+                    <Content
+                      component="p"
+                      className="provider-setup-template__cluster-estimate-label"
+                    >
+                      Estimated total
+                    </Content>
+                    <div className="provider-setup-template__cluster-estimate-totals">
+                      <span className="provider-setup-template__cluster-estimate-hourly">
+                        ${resolvedClusterComposedRate.hourlyRate.toFixed(2)}
+                        <span className="provider-setup-template__cluster-estimate-unit">
+                          /hr
+                        </span>
+                      </span>
+                      <span className="provider-setup-template__cluster-estimate-monthly">
+                        $
+                        {resolvedClusterComposedRate.monthlyRate.toLocaleString('en-US', {
+                          maximumFractionDigits: 0,
+                        })}
+                        /mo
+                      </span>
+                    </div>
+                  </div>
+                  <DescriptionList
+                    isCompact
+                    isHorizontal
+                    className="provider-setup-template__cluster-estimate-breakdown"
+                    aria-label="Estimated rate breakdown"
+                  >
+                    <DescriptionListGroup>
+                      <DescriptionListTerm>Control plane</DescriptionListTerm>
+                      <DescriptionListDescription>
+                        ${resolvedClusterComposedRate.controlPlane.hourlyRate.toFixed(2)}/hr
+                      </DescriptionListDescription>
+                    </DescriptionListGroup>
+                    <DescriptionListGroup>
+                      <DescriptionListTerm>
+                        {formatClusterComposedWorkerLineLabel(resolvedClusterComposedRate)}
+                      </DescriptionListTerm>
+                      <DescriptionListDescription>
+                        $
+                        {(
+                          resolvedClusterComposedRate.workerCount *
+                          resolvedClusterComposedRate.worker.hourlyRate
+                        ).toFixed(2)}
+                        /hr
+                      </DescriptionListDescription>
+                    </DescriptionListGroup>
+                  </DescriptionList>
+                  <Content
+                    component="p"
+                    className="provider-setup-template__cluster-estimate-meta"
+                  >
+                    {getM360RateCardDisplayName(DEFAULT_M360_RATE_CARD_ID)}
+                    {clusterNodeTopologyMode === 'editable'
+                      ? ' · Changes if tenants adjust topology'
+                      : ''}
+                  </Content>
+                </>
+              ) : (
+                <>
+                  <Content
+                    component="p"
+                    className="provider-setup-template__cluster-estimate-label"
+                  >
+                    Estimated total
+                  </Content>
+                  <Content
+                    component="p"
+                    className="provider-setup-template__cluster-estimate-meta"
+                  >
+                    Missing control-plane or worker rates on{' '}
+                    {getM360RateCardDisplayName(DEFAULT_M360_RATE_CARD_ID)}.
+                  </Content>
+                </>
+              )}
+            </div>
           </div>
         )
       case 'field-policies':
@@ -1995,19 +2112,6 @@ export function ProviderSetupPublishCatalogWizard({
             <Content component="p" className="provider-setup-template__publish-step-lede">
               Set the name and description tenants see in the catalog.
             </Content>
-            {selectedTemplate ? (
-              <Alert
-                variant="info"
-                isInline
-                title="Inherited pricing"
-                className="provider-setup-template__publish-review-alert"
-              >
-                <Content component="p">
-                  This catalog item will use{' '}
-                  <strong>{formatRateCardSummary(resolveRateCard(selectedTemplate))}</strong>.
-                </Content>
-              </Alert>
-            ) : null}
             <Form autoComplete="off" className="provider-setup-template__publish-display-form">
               <FormGroup label="Name" fieldId="publish-catalog-display-name" isRequired>
                 <CatalogEditPreviousValue previous={editPrevious('displayName')} />
@@ -2172,16 +2276,33 @@ export function ProviderSetupPublishCatalogWizard({
               </>
             ) : (
               <>
-            {!templateRateConfigured ? (
+            {!m360RateConfigured ? (
               <Alert
                 variant="warning"
                 isInline
-                title="Rate card missing in M360"
+                title="M360 rate line missing"
                 className="provider-setup-template__publish-review-alert"
               >
                 <Content component="p">
-                  This offering cannot be created until a matching rate card exists in M360.
-                  Configure the rate externally, then refresh pricing in the catalog.
+                  {isClusterService ? (
+                    <>
+                      This offering cannot be created until a control-plane fee and matching
+                      bare-metal worker rates exist on the{' '}
+                      <strong>
+                        {getM360RateCardDisplayName(DEFAULT_M360_RATE_CARD_ID)}
+                      </strong>{' '}
+                      rate card in M360.
+                    </>
+                  ) : (
+                    <>
+                      This offering cannot be created until the selected hardware profile has a
+                      matching rate line on the{' '}
+                      <strong>
+                        {getM360RateCardDisplayName(DEFAULT_M360_RATE_CARD_ID)}
+                      </strong>{' '}
+                      rate card in M360.
+                    </>
+                  )}
                 </Content>
               </Alert>
             ) : null}
@@ -2246,8 +2367,8 @@ export function ProviderSetupPublishCatalogWizard({
               ) : null}
               <DescriptionListGroup>
                 <DescriptionListTerm>
-                  {isBareMetalService && hardwareOsMode === 'editable'
-                    ? 'Default disk image'
+                  {isBareMetalService && osImageMode === 'editable'
+                    ? 'Default OS image'
                     : softwareImageStepLabel}
                 </DescriptionListTerm>
                 <DescriptionListDescription>
@@ -2276,10 +2397,10 @@ export function ProviderSetupPublishCatalogWizard({
                         </Label>
                       ) : isBareMetalService ? (
                         <Label
-                          color={hardwareOsMode === 'editable' ? 'purple' : 'grey'}
+                          color={osImageMode === 'editable' ? 'purple' : 'grey'}
                           isCompact
                         >
-                          {getCatalogHardwareOsModeLabel(hardwareOsMode)}
+                          {getCatalogOsImageModeLabel(osImageMode)}
                         </Label>
                       ) : null}
                     </span>
@@ -2320,6 +2441,37 @@ export function ProviderSetupPublishCatalogWizard({
                   </DescriptionListGroup>
                 </>
               ) : null}
+              <DescriptionListGroup>
+                <DescriptionListTerm>
+                  {isClusterService ? 'Estimated catalog rate' : 'M360 catalog rate'}
+                </DescriptionListTerm>
+                <DescriptionListDescription>
+                  {isClusterService && resolvedClusterComposedRate ? (
+                    <span className="provider-setup-template__publish-review-rate-stack">
+                      <strong>
+                        {formatClusterComposedRateSummary(resolvedClusterComposedRate)}
+                      </strong>
+                      <span className="provider-setup-template__publish-review-rate-meta">
+                        {formatClusterComposedRateBreakdown(resolvedClusterComposedRate)}
+                      </span>
+                      <span className="provider-setup-template__publish-review-rate-meta">
+                        {getM360RateCardDisplayName(DEFAULT_M360_RATE_CARD_ID)}
+                      </span>
+                    </span>
+                  ) : resolvedM360RateLine ? (
+                    <>
+                      <strong>{formatM360RateLineSummary(resolvedM360RateLine)}</strong> for{' '}
+                      {resolvedM360RateLine.resourceShortLabel}
+                      <span className="provider-setup-template__publish-review-rate-meta">
+                        {' '}
+                        · {getM360RateCardDisplayName(DEFAULT_M360_RATE_CARD_ID)} rate card
+                      </span>
+                    </>
+                  ) : (
+                    '—'
+                  )}
+                </DescriptionListDescription>
+              </DescriptionListGroup>
               {includesPublishStep('field-policies') ? (
                 <DescriptionListGroup>
                   <DescriptionListTerm>Lock fields</DescriptionListTerm>
@@ -2380,11 +2532,15 @@ export function ProviderSetupPublishCatalogWizard({
       return withLeaveConfirm({ isNextDisabled: !selectedTemplateRefId })
     }
 
-    if (stepId === 'hardware-os') {
+    if (stepId === 'hardware') {
       return withLeaveConfirm({
-        isNextDisabled: isClusterService
-          ? !selectedDiskImageId
-          : !selectedInstanceType || !selectedDiskImageId,
+        isNextDisabled: !selectedInstanceType,
+      })
+    }
+
+    if (stepId === 'os') {
+      return withLeaveConfirm({
+        isNextDisabled: !selectedDiskImageId,
       })
     }
 

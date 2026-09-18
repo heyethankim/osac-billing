@@ -70,7 +70,10 @@ export type RegisteredOrganization = {
   /** Mapped M360 tenant / billing account identifier. */
   m360AccountId?: string
   m360ConnectionStatus?: M360ConnectionStatus
-  /** Assigned M360 rate card for this tenant's billing account. */
+  /**
+   * Shared M360 rate card applied to this tenant (flat rate for all tenants in MVP).
+   * Not selected or created in OSAC.
+   */
   m360RateCardId?: string
   m360RateCardName?: string
   /** True after the Provider admin confirms the OSAC ↔ M360 link. */
@@ -157,8 +160,7 @@ export type OrganizationSetupNextAction = 'billing' | 'idp' | 'rbac'
 
 export const TENANT_ONBOARDING_STEPS = [
   { id: 'general', label: 'General' },
-  { id: 'billing_account', label: 'Billing account' },
-  { id: 'rate_card', label: 'Rate card' },
+  { id: 'billing_account', label: 'Billing' },
   { id: 'review', label: 'Review' },
 ] as const
 
@@ -173,16 +175,15 @@ export function resolveTenantSetupStatus(
 
   const m360AccountId =
     organization.m360AccountId?.trim() || organization.billingAccountId.trim()
-  const hasRateCard = Boolean(organization.m360RateCardId?.trim())
   const isLinked =
     organization.billingAccountLinked === true ||
     organization.m360ConnectionStatus === 'connected'
 
-  if (isLinked && hasRateCard && m360AccountId) {
+  if (isLinked && m360AccountId) {
     return 'ready'
   }
 
-  if (m360AccountId && hasRateCard) {
+  if (m360AccountId) {
     return 'billing_configured'
   }
 
@@ -861,7 +862,6 @@ export const ORGANIZATION_SETUP_NEXT_ACTION_LABEL: Record<OrganizationSetupNextA
 export type OrganizationActivationStepId =
   | 'tenant_created'
   | 'billing_account'
-  | 'rate_card'
   | 'idp'
 
 export type OrganizationActivationStepStatus =
@@ -930,18 +930,6 @@ function getOrganizationBillingAccountStepDescription(
   return accountLabel
 }
 
-function getOrganizationRateCardStepDescription(organization: RegisteredOrganization): string {
-  if (organization.m360RateCardName?.trim()) {
-    return organization.m360RateCardName.trim()
-  }
-
-  if (isOrganizationSetupM360AccountInactive(organization)) {
-    return 'Not configured · Requires active billing account'
-  }
-
-  return 'Not configured'
-}
-
 function getOrganizationIdentityProviderStepDescription(
   organization: RegisteredOrganization,
 ): string | null {
@@ -972,8 +960,6 @@ export function getOrganizationActivationSteps(
   const billingAccountInactive = isOrganizationSetupM360AccountInactive(organization)
   const billingAccountComplete = Boolean(m360AccountId) && !billingAccountInactive
   const billingAccountProblematic = Boolean(m360AccountId) && billingAccountInactive
-  const rateCardComplete = Boolean(organization.m360RateCardId?.trim())
-  const rateCardProblematic = !rateCardComplete && billingAccountProblematic
   const idpComplete = organization.identityProviderConnected
 
   const steps: Array<
@@ -991,13 +977,6 @@ export function getOrganizationActivationSteps(
       complete: billingAccountComplete,
       problematic: billingAccountProblematic,
       description: getOrganizationBillingAccountStepDescription(organization),
-    },
-    {
-      id: 'rate_card',
-      label: 'Rate card',
-      complete: rateCardComplete,
-      problematic: rateCardProblematic,
-      description: getOrganizationRateCardStepDescription(organization),
     },
     {
       id: 'idp',
@@ -1053,13 +1032,6 @@ export const DEMO_HARBORLINE_CAPITAL_NAME = 'harborline-capital'
 export const DEMO_HARBORLINE_CAPITAL_TENANT_ID = DEMO_HARBORLINE_CAPITAL_NAME
 export const DEMO_HARBORLINE_CAPITAL_SLUG = 'harborline'
 export const DEMO_HARBORLINE_CAPITAL_DOMAIN = 'harborlinecapital.com'
-
-/** Pending enterprise with a VIP catalog item but incomplete billing onboarding. */
-export const DEMO_CEDAR_RIDGE_CREDIT_ORG_ID = 'org-cedar-ridge-credit'
-export const DEMO_CEDAR_RIDGE_CREDIT_NAME = 'cedar-ridge-credit'
-export const DEMO_CEDAR_RIDGE_CREDIT_TENANT_ID = DEMO_CEDAR_RIDGE_CREDIT_NAME
-export const DEMO_CEDAR_RIDGE_CREDIT_SLUG = 'cedar-ridge-credit'
-export const DEMO_CEDAR_RIDGE_CREDIT_DOMAIN = 'cedarridgecredit.com'
 
 export const REGISTER_ORGANIZATION_STEPS = [
   { id: 'organization', label: 'Tenant' },
@@ -1349,74 +1321,6 @@ export function createDemoHarborlineCapitalOrganization(
     rbacConfigured: true,
     status: 'Active',
     createdAt: '2026-06-18T11:00:00.000Z',
-  }
-}
-
-/** Cedar Ridge Credit — VIP catalog assigned; inactive M360 billing; IdP connected. */
-export function createDemoCedarRidgeCreditOrganization(
-  options: {
-    catalogItemId?: string | null
-    catalogDisplayName?: string | null
-  } = {},
-): RegisteredOrganization {
-  const primaryDomain = DEMO_CEDAR_RIDGE_CREDIT_DOMAIN
-
-  return {
-    id: DEMO_CEDAR_RIDGE_CREDIT_ORG_ID,
-    name: DEMO_CEDAR_RIDGE_CREDIT_NAME,
-    tenantId: DEMO_CEDAR_RIDGE_CREDIT_TENANT_ID,
-    slug: DEMO_CEDAR_RIDGE_CREDIT_SLUG,
-    primaryDomain,
-    additionalDomains: [],
-    displayName: DEMO_CEDAR_RIDGE_CREDIT_NAME,
-    m360AccountId: 'cedar-ridge-credit',
-    m360ConnectionStatus: 'pending',
-    billingAccountId: '',
-    billingAccountName: 'cedar-ridge-credit',
-    tenantSetupStatus: 'incomplete',
-    billingAccountLinked: false,
-    logoSrc: null,
-    logoFileName: null,
-    catalogItemId: options.catalogItemId ?? null,
-    catalogDisplayName: options.catalogDisplayName ?? null,
-    externalIpPoolId: null,
-    externalIpPoolName: null,
-    externalIpPoolCidr: null,
-    maxInstances: 12,
-    tenantAdminName: '',
-    tenantAdminEmail: '',
-    additionalTenantAdmins: [],
-    invitedTenantUserEmails: [],
-    identityProviderConnected: true,
-    identityProviderConnectedBy: 'provider-admin',
-    identityProviderName: buildDemoIdentityProviderName('OIDC', primaryDomain),
-    identityProviderDisplayName: 'cedar-ridge-credit-idp',
-    identityProviderProtocol: 'OIDC',
-    identityProviderIssuerUrl: `https://login.${primaryDomain}/oauth2`,
-    identityProviderClientId: 'cedar-ridge-credit',
-    identityProviders: [
-      {
-        id: 'idp-cedar-ridge-primary',
-        name: buildDemoIdentityProviderName('OIDC', primaryDomain),
-        displayName: 'cedar-ridge-credit-idp',
-        protocol: 'OIDC',
-        issuerUrl: `https://login.${primaryDomain}/oauth2`,
-        clientId: 'cedar-ridge-credit',
-      },
-    ],
-    idpManagerEmail: null,
-    idpInviteToken: null,
-    idpInviteStatus: 'none',
-    idpInviteSentAt: null,
-    idpInviteExpiresAt: null,
-    breakGlassName: 'IdP manager',
-    breakGlassEmail: `idp-admin@${primaryDomain}`,
-    breakGlassUsername: generateBreakGlassUsername(DEMO_CEDAR_RIDGE_CREDIT_SLUG),
-    breakGlassPassword: getDemoBreakGlassPassword(DEMO_CEDAR_RIDGE_CREDIT_SLUG),
-    breakGlassIssuedAt: new Date().toISOString(),
-    rbacConfigured: false,
-    status: 'Pending activation',
-    createdAt: new Date().toISOString(),
   }
 }
 

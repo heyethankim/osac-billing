@@ -159,7 +159,7 @@ export function BmaasLandingPage() {
     {
       id: 'bmaas-landing-role-provider-title',
       title: 'Provider Admin',
-      description: 'Register tenants, link M360 billing accounts, and assign rate cards.',
+      description: 'Register tenants and link M360 billing accounts. One flat M360 rate card prices all tenants.',
       icon: <CrownIcon />,
       actions: <SingleEnterActions to="/provider" ariaLabel="Enter Provider Admin demo" />,
       prototypeLinks: providerPrototypeLinks,

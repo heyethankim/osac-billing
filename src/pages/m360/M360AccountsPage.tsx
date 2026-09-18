@@ -12,6 +12,7 @@ import {
 } from '@patternfly/react-core'
 import { ActionsColumn, Table, Tbody, Td, Th, Thead, Tr, type IAction } from '@patternfly/react-table'
 import {
+  formatM360OrganizationHierarchyLabel,
   formatM360PortalValue,
   getM360AccountStatusLabelColor,
   getM360AccountTenantName,
@@ -69,6 +70,7 @@ export function M360AccountsPage() {
         <Thead>
           <Tr>
             <Th>Name</Th>
+            <Th>Organization</Th>
             <Th>Status</Th>
             <Th>Approval</Th>
             <Th>External ID</Th>
@@ -91,6 +93,9 @@ export function M360AccountsPage() {
                   >
                     {formatM360PortalValue(account.accountName)}
                   </RouterButton>
+                </Td>
+                <Td dataLabel="Organization" className="m360-portal__table-cell-text">
+                  {formatM360OrganizationHierarchyLabel(account)}
                 </Td>
                 <Td dataLabel="Status">
                   {statusColor ? (

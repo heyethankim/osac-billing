@@ -3,11 +3,9 @@ import type { ProviderAdminNavId } from '../providerAdmin/constants'
 import { resolveProviderAdminNavId } from '../providerAdmin/constants'
 import {
   createDemoBlueSolaceOnboardingOrganization,
-  createDemoCedarRidgeCreditOrganization,
   createDemoHarborlineCapitalOrganization,
   createDemoNorthSummitBankOrganization,
   DEMO_BLUESOLACE_ORG_ID,
-  DEMO_CEDAR_RIDGE_CREDIT_ORG_ID,
   DEMO_HARBORLINE_CAPITAL_ORG_ID,
   DEMO_HARBORLINE_CAPITAL_SLUG,
   DEMO_IDP_MANAGER_ORG_SLUG,
@@ -277,10 +275,15 @@ export type ProviderCatalogDraft = {
    */
   clusterVersionMode?: CatalogClusterVersionMode
   /**
-   * Bare metal only. When `editable`, tenants may change instance type and disk
-   * image at launch. Defaults to locked when omitted.
+   * Bare metal only. When `editable`, tenants may change instance type at launch.
+   * Defaults to locked when omitted.
    */
   hardwareOsMode?: CatalogHardwareOsMode
+  /**
+   * Bare metal only. When `editable`, tenants may change disk image at launch.
+   * Defaults to `hardwareOsMode` when omitted (legacy catalog items).
+   */
+  osImageMode?: CatalogHardwareOsMode
   /** Cluster default worker node set. */
   nodeSetId?: string
   nodeSetLabel?: string
@@ -668,6 +671,7 @@ export function duplicateProviderCatalogItem(catalogItemId: string): ProviderCat
     ...(source.diskImageLabel ? { diskImageLabel: source.diskImageLabel } : {}),
     ...(source.clusterVersionMode ? { clusterVersionMode: source.clusterVersionMode } : {}),
     ...(source.hardwareOsMode ? { hardwareOsMode: source.hardwareOsMode } : {}),
+    ...(source.osImageMode ? { osImageMode: source.osImageMode } : {}),
     ...(source.nodeSetId ? { nodeSetId: source.nodeSetId } : {}),
     ...(source.nodeSetLabel ? { nodeSetLabel: source.nodeSetLabel } : {}),
     ...(source.hostTypeId ? { hostTypeId: source.hostTypeId } : {}),
@@ -823,6 +827,7 @@ export function updateProviderCatalogItemFromPayload(
       ? { clusterVersionMode: payload.clusterVersionMode }
       : {}),
     ...(payload.hardwareOsMode ? { hardwareOsMode: payload.hardwareOsMode } : {}),
+    ...(payload.osImageMode ? { osImageMode: payload.osImageMode } : {}),
     ...(payload.nodeSetId ? { nodeSetId: payload.nodeSetId } : {}),
     ...(payload.nodeSetLabel ? { nodeSetLabel: payload.nodeSetLabel } : {}),
     ...(payload.hostTypeId ? { hostTypeId: payload.hostTypeId } : {}),
@@ -1558,7 +1563,6 @@ const CANONICAL_DEMO_ORG_IDS = new Set([
   DEMO_NORTH_SUMMIT_BANK_ORG_ID,
   DEMO_HARBORLINE_CAPITAL_ORG_ID,
   DEMO_BLUESOLACE_ORG_ID,
-  DEMO_CEDAR_RIDGE_CREDIT_ORG_ID,
 ])
 
 function organizationCompletenessScore(org: RegisteredOrganization): number {
@@ -1834,19 +1838,11 @@ function removeRegisteredOrganizationsRaw(): void {
 }
 
 /**
- * Seeds North Summit Bank, Cedar Ridge Credit, and Harborline Capital as Tenants page baselines.
+ * Seeds North Summit Bank and Harborline Capital as Tenants page baselines.
  */
 export function ensureProviderDemoOrganizations(): RegisteredOrganization[] {
   try {
     const current = getProviderRegisteredOrganizations()
-    const catalogItems = getProviderCatalogItems()
-    const denseGpu =
-      catalogItems.find((item) => item.catalogItemId === 'cat-bm-dense-gpu') ??
-      catalogItems.find((item) => item.catalogItemId === 'cat_BM_AI_INFERENCE') ??
-      catalogItems.find((item) => item.displayName === 'bare-metal-dense-gpu-node') ??
-      catalogItems.find((item) => item.displayName === 'Bare Metal - Dense GPU Node') ??
-      null
-    const catalogDraft = denseGpu ?? getProviderCatalogDraft()
     const pools = getProviderExternalIpPools()
     const northSummitPool =
       getExternalIpPoolById(pools, DEFAULT_REGISTER_ORGANIZATION_FORM.externalIpPoolId) ??
@@ -1867,11 +1863,6 @@ export function ensureProviderDemoOrganizations(): RegisteredOrganization[] {
       externalIpPoolCidr: northSummitPool?.cidr ?? null,
     })
 
-    const cedarRidgeBase = createDemoCedarRidgeCreditOrganization({
-      catalogItemId: catalogDraft?.catalogItemId ?? null,
-      catalogDisplayName: catalogDraft?.displayName ?? null,
-    })
-
     const harborlineBase = createDemoHarborlineCapitalOrganization({
       catalogItemId: null,
       catalogDisplayName: null,
@@ -1884,14 +1875,17 @@ export function ensureProviderDemoOrganizations(): RegisteredOrganization[] {
       (tenant) =>
         tenant.id === northSummitBase.id ||
         tenant.slug === northSummitBase.slug ||
-        tenant.id === cedarRidgeBase.id ||
-        tenant.slug === cedarRidgeBase.slug ||
         tenant.id === harborlineBase.id ||
         tenant.slug === DEMO_HARBORLINE_CAPITAL_SLUG,
     )
     const replacedIds = new Set(replacedTenants.map((tenant) => tenant.id))
     const remainingTenants = current.filter(
-      (tenant) => !replacedIds.has(tenant.id),
+      (tenant) =>
+        !replacedIds.has(tenant.id) &&
+        tenant.id !== 'org-cedar-ridge-credit' &&
+        tenant.slug !== 'cedar-ridge-credit' &&
+        tenant.name !== 'cedar-ridge-credit' &&
+        tenant.name !== 'Cedar Ridge Credit',
     )
 
     const pendingInviteSource = replacedTenants.find(
@@ -1934,7 +1928,6 @@ export function ensureProviderDemoOrganizations(): RegisteredOrganization[] {
 
     setProviderRegisteredOrganizations([
       northSummit,
-      cedarRidgeBase,
       harborlineBase,
       ...remainingTenants,
     ])

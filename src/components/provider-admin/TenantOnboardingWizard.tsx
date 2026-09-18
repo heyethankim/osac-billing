@@ -33,21 +33,18 @@ import type { ProviderCatalogDraft } from '../../providerSetup/storage'
 import {
   BLUESOLACE_ONBOARDING_M360_ACCOUNT_NAME,
   DEFAULT_ONBOARDING_M360_ACCOUNT_NAME,
-  DEFAULT_ONBOARDING_RATE_CARD_ID,
-  DEMO_M360_RATE_CARDS,
   fetchM360BillingAccounts,
   findM360AccountByReference,
   findM360AccountByTenantName,
-  findM360RateCard,
   formatM360PortalValue,
   buildM360AccountDetailPath,
   getM360AccountLinkConflictMessage,
   getM360AccountTenantName,
   isM360AccountLinkedToAnotherTenant,
   isM360BillingAccountInactive,
-  isM360OnboardingReviewAccount,
   linkM360AccountInDemoStore,
   mergeResumedM360BillingAccounts,
+  resolveM360AccountRateCard,
   type M360BillingAccount,
 } from '../../billing/m360Accounts'
 import { resolveM360ConnectionStatus } from '../../billing/m360'
@@ -167,7 +164,6 @@ export function TenantOnboardingWizard({
   const [billingAccounts, setBillingAccounts] = useState<M360BillingAccount[]>([])
   const [billingApiState, setBillingApiState] = useState<BillingApiState>('idle')
   const [selectedAccountName, setSelectedAccountName] = useState('')
-  const [selectedRateCardId, setSelectedRateCardId] = useState('')
   const [linkError, setLinkError] = useState<string | null>(null)
   const [isLinking, setIsLinking] = useState(false)
 
@@ -227,11 +223,6 @@ export function TenantOnboardingWizard({
     ? findM360AccountByReference(selectedAccountName)
     : null
   const selectedAccountInactive = isM360BillingAccountInactive(selectedAccount)
-  const showSelectedAccountReviewWarning =
-    Boolean(selectedAccountName) &&
-    isM360OnboardingReviewAccount(selectedAccountName) &&
-    !selectedAccountInactive
-  const selectedRateCard = findM360RateCard(selectedRateCardId)
   const draftOrganizationSlug = slugifyOrganizationName(form.organizationName)
   const accountConflict =
     selectedAccount &&
@@ -273,7 +264,6 @@ export function TenantOnboardingWizard({
       accountName: isBluesolaceResume
         ? BLUESOLACE_ONBOARDING_M360_ACCOUNT_NAME
         : DEFAULT_ONBOARDING_M360_ACCOUNT_NAME,
-      rateCardId: DEFAULT_ONBOARDING_RATE_CARD_ID,
     }
   }
 
@@ -283,7 +273,6 @@ export function TenantOnboardingWizard({
     setBillingAccounts([])
     setBillingApiState('idle')
     setSelectedAccountName('')
-    setSelectedRateCardId('')
     setLinkError(null)
     setIsLinking(false)
   }
@@ -319,16 +308,12 @@ export function TenantOnboardingWizard({
           ? getM360AccountTenantName(resumedAccount)
           : billingDefaults.accountName,
       )
-      setSelectedRateCardId(
-        resumeOrganization.m360RateCardId?.trim() || billingDefaults.rateCardId,
-      )
       setBillingApiState('idle')
       return
     }
 
     setForm(buildTenantOnboardingForm(getProviderRegisteredOrganizations()))
     setSelectedAccountName(DEFAULT_ONBOARDING_M360_ACCOUNT_NAME)
-    setSelectedRateCardId(DEFAULT_ONBOARDING_RATE_CARD_ID)
   }, [isOpen, resumeOrganization])
 
   useEffect(() => {
@@ -352,12 +337,25 @@ export function TenantOnboardingWizard({
         } else {
           setSelectedAccountName((current) => current || billingDefaults.accountName)
         }
-        setSelectedRateCardId((current) => current || billingDefaults.rateCardId)
       })
       .catch(() => {
         setBillingApiState('error')
       })
   }, [billingApiState, createdOrganization, draftTenantName, isOpen, resumeOrganization])
+
+  useEffect(() => {
+    if (!matchedExternalAccount || billingApiState !== 'ready') {
+      return
+    }
+
+    const matchName = getM360AccountTenantName(matchedExternalAccount)
+    setSelectedAccountName((current) => {
+      if (!current || current === DEFAULT_ONBOARDING_M360_ACCOUNT_NAME) {
+        return matchName
+      }
+      return current
+    })
+  }, [billingApiState, matchedExternalAccount])
 
   const buildOrganizationFromForm = (): RegisteredOrganization | null => {
     if (!isGeneralStepValid) {
@@ -448,7 +446,6 @@ export function TenantOnboardingWizard({
     if (
       !organization ||
       !selectedAccount ||
-      !selectedRateCard ||
       accountConflict ||
       isM360BillingAccountInactive(selectedAccount)
     ) {
@@ -471,15 +468,16 @@ export function TenantOnboardingWizard({
 
     const linkedTenantName = getM360AccountTenantName(selectedAccount)
     linkM360AccountInDemoStore(linkedTenantName, organization)
+    const detectedRateCard = resolveM360AccountRateCard(selectedAccount)
 
     const linked: RegisteredOrganization = {
       ...organization,
       m360AccountId: linkedTenantName,
       billingAccountId: linkedTenantName,
       billingAccountName: linkedTenantName,
+      m360RateCardId: detectedRateCard?.id,
+      m360RateCardName: detectedRateCard?.name,
       m360ConnectionStatus: resolveM360ConnectionStatus(linkedTenantName),
-      m360RateCardId: selectedRateCard.id,
-      m360RateCardName: selectedRateCard.name,
       billingAccountLinked: true,
       tenantSetupStatus: 'ready',
     }
@@ -651,72 +649,26 @@ export function TenantOnboardingWizard({
     const useThreeColumnAccountGrid = sortedBillingAccounts.length >= 3
 
     return (
-      <div className="provider-admin-organizations__wizard-step tenant-onboarding__step tenant-onboarding__billing-step">
+      <div className="provider-admin-organizations__wizard-step tenant-onboarding__step">
         <Content component="p" className="provider-admin-organizations__wizard-lede">
-          Select the M360 billing account for this tenant. Billing setup is Provider admin only.
+          Choose one M360 billing account for this tenant.
         </Content>
-
-        {matchedExternalAccount &&
-        selectedAccountName !== getM360AccountTenantName(matchedExternalAccount) ? (
-          <Alert
-            variant="info"
-            isInline
-            title="Existing billing account found"
-            className="tenant-onboarding__alert"
-          >
-            An M360 billing account is already associated with this tenant name.
-            <div className="tenant-onboarding__matched-account">
-              <strong>{getM360AccountTenantName(matchedExternalAccount)}</strong>
-              <Button
-                variant="link"
-                isInline
-                onClick={() =>
-                  setSelectedAccountName(getM360AccountTenantName(matchedExternalAccount))
-                }
-              >
-                Use this account
-              </Button>
-            </div>
-          </Alert>
-        ) : null}
 
         {selectedAccountInactive && selectedAccount ? (
           <Alert
             variant="warning"
             isInline
-            title="M360 billing account inactive"
+            title="Selected account is inactive"
             className="tenant-onboarding__alert"
           >
-            The M360 billing account for this tenant is inactive. Activate the account in M360
-            before you can link billing.
-            <div className="tenant-onboarding__matched-account">
-              <strong>{getM360AccountTenantName(selectedAccount)}</strong>
-              <RouterButton
-                variant="link"
-                isInline
-                to={buildM360AccountDetailPath(getM360AccountTenantName(selectedAccount))}
-              >
-                Open M360 accounts
-              </RouterButton>
-            </div>
-          </Alert>
-        ) : null}
-
-        {showSelectedAccountReviewWarning ? (
-          <Alert
-            variant="warning"
-            isInline
-            title="Review M360 billing account"
-            className="tenant-onboarding__alert"
-          >
-            This M360 billing account may already be associated with another tenant, or linked
-            billing accounts are inactive. Check M360 accounts before continuing.
-            <div className="tenant-onboarding__matched-account">
-              <strong>{selectedAccountName}</strong>
-              <RouterButton variant="link" isInline to={M360_ACCOUNTS_PATH}>
-                Open M360 accounts
-              </RouterButton>
-            </div>
+            Activate it in M360 before linking.{' '}
+            <RouterButton
+              variant="link"
+              isInline
+              to={buildM360AccountDetailPath(getM360AccountTenantName(selectedAccount))}
+            >
+              Open in M360
+            </RouterButton>
           </Alert>
         ) : null}
 
@@ -806,7 +758,7 @@ export function TenantOnboardingWizard({
 
                   return (
                     <button
-                      key={tenantName}
+                      key={account.accountId}
                       type="button"
                       role="radio"
                       aria-checked={isSelected}
@@ -907,85 +859,6 @@ export function TenantOnboardingWizard({
     )
   }
 
-  function renderRateCardStep() {
-    const useThreeColumnRateCardGrid = DEMO_M360_RATE_CARDS.length >= 3
-
-    return (
-      <div className="provider-admin-organizations__wizard-step tenant-onboarding__step tenant-onboarding__billing-step">
-        <Content component="p" className="provider-admin-organizations__wizard-lede">
-          Select the rate card that applies to this tenant&apos;s usage.
-        </Content>
-        <Form autoComplete="off" className="provider-admin-organizations__wizard-form">
-          <FormGroup label="Rate card" fieldId="tenant-onboarding-rate-card" isRequired>
-            <div
-              id="tenant-onboarding-rate-card"
-              className={`provider-setup-template__card-group provider-setup-template__card-group--instance-types tenant-onboarding__rate-card-cards${
-                useThreeColumnRateCardGrid
-                  ? ' provider-setup-template__card-group--instance-types-fill'
-                  : ''
-              }`}
-              role="radiogroup"
-              aria-label="Rate card"
-            >
-              {DEMO_M360_RATE_CARDS.map((card) => {
-                const isSelected = selectedRateCardId === card.id
-                const titleId = `tenant-onboarding-rate-card-${card.id}-name`
-
-                return (
-                  <button
-                    key={card.id}
-                    type="button"
-                    role="radio"
-                    aria-checked={isSelected}
-                    aria-labelledby={titleId}
-                    className={`provider-setup-template__select-card provider-setup-template__select-card--instance-type tenant-onboarding__rate-card-select-card${
-                      isSelected ? ' provider-setup-template__select-card--selected' : ''
-                    }`}
-                    onClick={() => setSelectedRateCardId(card.id)}
-                  >
-                    {isSelected ? (
-                      <Label
-                        color="grey"
-                        isCompact
-                        className="provider-setup-template__select-card-selected-badge"
-                      >
-                        Selected
-                      </Label>
-                    ) : null}
-                    <Title
-                      id={titleId}
-                      headingLevel="h3"
-                      size="md"
-                      className="provider-setup-template__select-card-title"
-                    >
-                      {card.name}
-                    </Title>
-                    <Content
-                      component="p"
-                      className="provider-setup-template__select-card-detail"
-                    >
-                      {card.region}
-                    </Content>
-                  </button>
-                )
-              })}
-            </div>
-            {!selectedRateCardId ? (
-              <FormHelperText>
-                <HelperText>
-                  <HelperTextItem variant="warning">
-                    Rate card required — assign a rate card before this tenant can provision
-                    resources.
-                  </HelperTextItem>
-                </HelperText>
-              </FormHelperText>
-            ) : null}
-          </FormGroup>
-        </Form>
-      </div>
-    )
-  }
-
   function renderReviewStep() {
     const organization = createdOrganization ?? resumeOrganization
     const tenantName = organization?.name || draftTenantName || '—'
@@ -998,8 +871,6 @@ export function TenantOnboardingWizard({
     const logoSrc = organization?.logoSrc?.trim() || form.logoSrc.trim()
     const logoFileName =
       organization?.logoFileName?.trim() || form.logoFileName.trim() || tenantName
-    const reviewRateCard =
-      selectedRateCard ?? findM360RateCard(organization?.m360RateCardId ?? '')
 
     return (
       <div className="provider-admin-organizations__wizard-step tenant-onboarding__step">
@@ -1041,24 +912,6 @@ export function TenantOnboardingWizard({
               {selectedAccount ? getM360AccountTenantName(selectedAccount) : '—'}
             </DescriptionListDescription>
           </DescriptionListGroup>
-          <DescriptionListGroup>
-            <DescriptionListTerm>Rate card</DescriptionListTerm>
-            <DescriptionListDescription>
-              {reviewRateCard ? (
-                <div className="tenant-onboarding__review-rate-card">
-                  <span>{reviewRateCard.name}</span>
-                  <Content
-                    component="p"
-                    className="tenant-onboarding__review-rate-card-region"
-                  >
-                    {reviewRateCard.region}
-                  </Content>
-                </div>
-              ) : (
-                organization?.m360RateCardName ?? '—'
-              )}
-            </DescriptionListDescription>
-          </DescriptionListGroup>
         </DescriptionList>
         {linkError ? (
           <Alert variant="danger" isInline title="Unable to register tenant" className="tenant-onboarding__alert">
@@ -1075,8 +928,6 @@ export function TenantOnboardingWizard({
         return renderGeneralStep()
       case 'billing_account':
         return renderBillingAccountStep()
-      case 'rate_card':
-        return renderRateCardStep()
       case 'review':
         return renderReviewStep()
       default:
@@ -1107,15 +958,8 @@ export function TenantOnboardingWizard({
       })
     }
 
-    if (stepId === 'rate_card') {
-      return wrapStepFooter({
-        isNextDisabled: !selectedRateCardId,
-      })
-    }
-
     if (stepId === 'review') {
-      const canRegister =
-        Boolean(selectedAccount) && Boolean(selectedRateCard) && !accountConflict
+      const canRegister = Boolean(selectedAccount) && !accountConflict
 
       return (
         <TenantOnboardingNavigateFooter

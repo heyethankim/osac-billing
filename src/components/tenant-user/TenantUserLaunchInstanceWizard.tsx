@@ -61,12 +61,14 @@ import {
   getCatalogClusterVersionOptions,
   getCatalogDiskImageOptions,
   getCatalogHardwareOsModeLabel,
+  getCatalogOsImageModeLabel,
   getCatalogInstanceTypeOptions,
   getLatestCatalogClusterVersionId,
   getReleaseImageForClusterVersion,
   resolveCatalogClusterNodeTopologyMode,
   resolveCatalogClusterVersionMode,
   resolveCatalogHardwareOsMode,
+  resolveCatalogOsImageMode,
 } from '../../catalog/catalogPublishConfig'
 import type { TenantUserCatalogCard } from '../../tenantUser/catalog'
 import { PlusCircleIcon } from '@patternfly/react-icons/dist/esm/icons/plus-circle-icon'
@@ -258,9 +260,15 @@ export function TenantUserLaunchInstanceWizard({
   const isClusterCatalogItem = catalogItem.serviceId === 'cluster'
   const isVmCatalogItem = catalogItem.serviceId === 'virtual-machine'
   const isBareMetalCatalogItem = catalogItem.serviceId === 'baremetal'
-  const isBareMetalHardwareOsEditable =
+  const isBareMetalHardwareEditable =
     isBareMetalCatalogItem &&
     resolveCatalogHardwareOsMode(catalogItem.hardwareOsMode) === 'editable'
+  const isBareMetalOsEditable =
+    isBareMetalCatalogItem &&
+    resolveCatalogOsImageMode(catalogItem.osImageMode, catalogItem.hardwareOsMode) ===
+      'editable'
+  const isBareMetalHardwareOsEditable =
+    isBareMetalHardwareEditable || isBareMetalOsEditable
   const isServiceAwareCatalogItem = isClusterCatalogItem || isVmCatalogItem
   const usesGeneralFirstStep =
     isClusterCatalogItem || isVmCatalogItem || isBareMetalCatalogItem
@@ -319,6 +327,7 @@ export function TenantUserLaunchInstanceWizard({
               diskImageId: catalogItem.diskImageId,
               clusterVersionMode: catalogItem.clusterVersionMode,
               hardwareOsMode: catalogItem.hardwareOsMode,
+              osImageMode: catalogItem.osImageMode,
               nodeSetId: catalogItem.nodeSetId,
               nodeSetLabel: catalogItem.nodeSetLabel,
               hostTypeId: catalogItem.hostTypeId,
@@ -436,6 +445,9 @@ export function TenantUserLaunchInstanceWizard({
   )
   const hardwareOsModeLabel = getCatalogHardwareOsModeLabel(
     resolveCatalogHardwareOsMode(catalogItem.hardwareOsMode),
+  )
+  const osImageModeLabel = getCatalogOsImageModeLabel(
+    resolveCatalogOsImageMode(catalogItem.osImageMode, catalogItem.hardwareOsMode),
   )
   const bareMetalInstanceTypeOptions = useMemo(() => {
     const options = getCatalogInstanceTypeOptions('baremetal')
@@ -1494,58 +1506,62 @@ export function TenantUserLaunchInstanceWizard({
   const renderBareMetalHardwareOsStep = () => (
     <div className="tenant-user-launch-wizard__step">
       <Form autoComplete="off" className="tenant-user-launch-wizard__form">
-        <FormGroup label="Instance type" fieldId="launch-bm-instance-type" isRequired>
-          <FormSelect
-            id="launch-bm-instance-type"
-            value={form.instanceType}
-            onChange={(_event, value) =>
-              setForm((current) => ({ ...current, instanceType: value }))
-            }
-            aria-label="Instance type"
-          >
-            {bareMetalInstanceTypeOptions.map((option) => (
-              <FormSelectOption
-                key={option.id}
-                value={option.id}
-                label={
-                  option.accelerator
-                    ? `${option.label} (${option.detail} · ${option.accelerator})`
-                    : option.detail
-                      ? `${option.label} (${option.detail})`
-                      : option.label
-                }
-              />
-            ))}
-          </FormSelect>
-          <FormHelperText>
-            <HelperText>
-              <HelperTextItem>
-                {`Editable on this catalog item (${hardwareOsModeLabel}). Tenants can change at launch.`}
-              </HelperTextItem>
-            </HelperText>
-          </FormHelperText>
-        </FormGroup>
-        <FormGroup label="Disk image" fieldId="launch-bm-disk-image" isRequired>
-          <FormSelect
-            id="launch-bm-disk-image"
-            value={form.diskImageId}
-            onChange={(_event, value) =>
-              setForm((current) => ({ ...current, diskImageId: value }))
-            }
-            aria-label="Disk image"
-          >
-            {bareMetalDiskImageOptions.map((option) => (
-              <FormSelectOption key={option.id} value={option.id} label={option.label} />
-            ))}
-          </FormSelect>
-          <FormHelperText>
-            <HelperText>
-              <HelperTextItem>
-                {`Editable on this catalog item (${hardwareOsModeLabel}). Tenants can change at launch.`}
-              </HelperTextItem>
-            </HelperText>
-          </FormHelperText>
-        </FormGroup>
+        {isBareMetalHardwareEditable ? (
+          <FormGroup label="Instance type" fieldId="launch-bm-instance-type" isRequired>
+            <FormSelect
+              id="launch-bm-instance-type"
+              value={form.instanceType}
+              onChange={(_event, value) =>
+                setForm((current) => ({ ...current, instanceType: value }))
+              }
+              aria-label="Instance type"
+            >
+              {bareMetalInstanceTypeOptions.map((option) => (
+                <FormSelectOption
+                  key={option.id}
+                  value={option.id}
+                  label={
+                    option.accelerator
+                      ? `${option.label} (${option.detail} · ${option.accelerator})`
+                      : option.detail
+                        ? `${option.label} (${option.detail})`
+                        : option.label
+                  }
+                />
+              ))}
+            </FormSelect>
+            <FormHelperText>
+              <HelperText>
+                <HelperTextItem>
+                  {`Editable on this catalog item (${hardwareOsModeLabel}). Tenants can change at launch.`}
+                </HelperTextItem>
+              </HelperText>
+            </FormHelperText>
+          </FormGroup>
+        ) : null}
+        {isBareMetalOsEditable ? (
+          <FormGroup label="OS image" fieldId="launch-bm-disk-image" isRequired>
+            <FormSelect
+              id="launch-bm-disk-image"
+              value={form.diskImageId}
+              onChange={(_event, value) =>
+                setForm((current) => ({ ...current, diskImageId: value }))
+              }
+              aria-label="OS image"
+            >
+              {bareMetalDiskImageOptions.map((option) => (
+                <FormSelectOption key={option.id} value={option.id} label={option.label} />
+              ))}
+            </FormSelect>
+            <FormHelperText>
+              <HelperText>
+                <HelperTextItem>
+                  {`Editable on this catalog item (${osImageModeLabel}). Tenants can change at launch.`}
+                </HelperTextItem>
+              </HelperText>
+            </FormHelperText>
+          </FormGroup>
+        ) : null}
       </Form>
     </div>
   )

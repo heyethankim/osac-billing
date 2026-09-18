@@ -258,7 +258,8 @@ select.pf-v6-c-form-control {
 }
 
 .tenant-onboarding__step {
-  max-width: 42rem;
+  max-width: none;
+  width: 100%;
 }
 
 .tenant-onboarding__alert {
@@ -271,17 +272,6 @@ select.pf-v6-c-form-control {
   align-items: center;
   gap: var(--pf-t--global--spacer--md);
   padding-block: var(--pf-t--global--spacer--xl);
-}
-
-.tenant-onboarding__matched-account {
-  display: flex;
-  flex-direction: column;
-  gap: var(--pf-t--global--spacer--xs);
-  margin-block-start: var(--pf-t--global--spacer--sm);
-}
-
-.tenant-onboarding__billing-step {
-  max-width: none;
 }
 
 .tenant-onboarding__account-hint {

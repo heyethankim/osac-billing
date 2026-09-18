@@ -153,6 +153,7 @@ export function ProviderAdminWorkspacePage() {
         ? { clusterVersionMode: payload.clusterVersionMode }
         : {}),
       ...(payload.hardwareOsMode ? { hardwareOsMode: payload.hardwareOsMode } : {}),
+      ...(payload.osImageMode ? { osImageMode: payload.osImageMode } : {}),
       ...(payload.nodeSetId ? { nodeSetId: payload.nodeSetId } : {}),
       ...(payload.nodeSetLabel ? { nodeSetLabel: payload.nodeSetLabel } : {}),
       ...(payload.hostTypeId ? { hostTypeId: payload.hostTypeId } : {}),

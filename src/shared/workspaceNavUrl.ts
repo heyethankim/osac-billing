@@ -45,6 +45,15 @@ export function buildProviderOrganizationWorkspacePath(organizationId: string): 
   return `/provider/workspace?${params.toString()}`
 }
 
+export function buildProviderCatalogItemWorkspacePath(itemKey: string): string {
+  const params = new URLSearchParams({
+    nav: 'catalog',
+    [WORKSPACE_CATALOG_ITEM_PARAM]: itemKey.trim(),
+  })
+
+  return `/provider/workspace?${params.toString()}`
+}
+
 /**
  * Keep `?nav=` in sync with the active workspace page so every view is URL-addressable.
  * Clears `?item=` when leaving Catalog, `?instance=` when leaving Services, or whenever

@@ -60,7 +60,7 @@ export function M360RateMissingModal({
           <Content component="p">
             <strong>{item.displayName}</strong> is scoped to <strong>{tenantLabel}</strong>, but
             that tenant does not have billing configured yet. Publishing stays blocked until tenant
-            registration links an M360 billing account and rate card.
+            registration links an M360 billing account.
           </Content>
           {pricing.reason === 'm360_account_inactive' ? (
             <Content component="p">

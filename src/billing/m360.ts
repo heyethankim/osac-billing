@@ -1,9 +1,11 @@
 import {
   DEFAULT_M360_RATE_CARD_ID,
+  clusterComposedRateToRateCard,
   findM360RateLineForCatalogItem,
   formatM360RateLineSummary,
   listM360RateLineHeadlines,
   m360RateLineToRateCard,
+  resolveClusterComposedRateEstimate,
 } from './m360RateLines'
 import {
   findM360AccountByReference,
@@ -16,6 +18,10 @@ import {
   isTenantBillingConfigured,
   type RegisteredOrganization,
 } from '../providerAdmin/organizations'
+import {
+  DEFAULT_CLUSTER_HOST_TYPE_ID,
+  DEFAULT_CLUSTER_NODE_SET_ID,
+} from '../catalog/catalogPublishConfig'
 import {
   getProviderCatalogItems,
   getProviderRegisteredOrganizations,
@@ -54,6 +60,8 @@ export type CatalogItemPricingInput = Pick<
   | 'serviceId'
   | 'instanceTypeId'
   | 'displayName'
+  | 'nodeSetId'
+  | 'hostTypeId'
 >
 
 const M360_CONFIGURED_RATES_STORAGE_KEY = 'osac-m360-configured-catalog-rates'
@@ -300,8 +308,9 @@ function resolveConfiguredPricingFromRateCard(
   }
 }
 
-function resolveOrganizationRateCardId(organization: RegisteredOrganization | null): string {
-  return organization?.m360RateCardId?.trim() || DEFAULT_M360_RATE_CARD_ID
+function resolveOrganizationRateCardId(_organization: RegisteredOrganization | null): string {
+  // MVP: one flat M360 rate card for all tenants (no tenant-specific pricing).
+  return DEFAULT_M360_RATE_CARD_ID
 }
 
 function resolveCatalogItemRateCardId(
@@ -329,6 +338,43 @@ function resolveMissingRatePricing(
   }
 }
 
+function resolveCatalogItemRateLinePricing(
+  item: CatalogItemPricingInput,
+  rateCardId: string,
+  tenantName?: string,
+): CatalogItemM360Pricing {
+  if (item.serviceId === 'cluster') {
+    const estimate = resolveClusterComposedRateEstimate(
+      item.nodeSetId?.trim() || DEFAULT_CLUSTER_NODE_SET_ID,
+      item.hostTypeId?.trim() || DEFAULT_CLUSTER_HOST_TYPE_ID,
+      rateCardId,
+    )
+    if (!estimate) {
+      return resolveMissingRatePricing(rateCardId, tenantName)
+    }
+
+    return {
+      ...resolveConfiguredPricingFromRateCard(
+        clusterComposedRateToRateCard(estimate),
+        rateCardId,
+      ),
+      tenantName,
+    }
+  }
+
+  const rateLine = findM360RateLineForCatalogItem(item, rateCardId)
+  if (!rateLine) {
+    return resolveMissingRatePricing(rateCardId, tenantName)
+  }
+
+  const rateCard = m360RateLineToRateCard(rateLine)
+  return {
+    ...resolveConfiguredPricingFromRateCard(rateCard, rateCardId),
+    summary: formatM360RateLineSummary(rateLine),
+    tenantName,
+  }
+}
+
 export function getCatalogItemM360Pricing(item: CatalogItemPricingInput): CatalogItemM360Pricing {
   if (item.scope === 'vip-enterprise') {
     const tenantIds = resolveEnterpriseTenantIds(item)
@@ -341,30 +387,11 @@ export function getCatalogItemM360Pricing(item: CatalogItemPricingInput): Catalo
       }
 
       const rateCardId = resolveCatalogItemRateCardId(item, organization)
-      const rateLine = findM360RateLineForCatalogItem(item, rateCardId)
-      if (!rateLine) {
-        return resolveMissingRatePricing(rateCardId, tenantName)
-      }
-
-      const rateCard = m360RateLineToRateCard(rateLine)
-      return {
-        ...resolveConfiguredPricingFromRateCard(rateCard, rateCardId),
-        summary: formatM360RateLineSummary(rateLine),
-      }
+      return resolveCatalogItemRateLinePricing(item, rateCardId, tenantName)
     }
   }
 
-  const rateCardId = DEFAULT_M360_RATE_CARD_ID
-  const rateLine = findM360RateLineForCatalogItem(item, rateCardId)
-  if (!rateLine) {
-    return resolveMissingRatePricing(rateCardId)
-  }
-
-  const rateCard = m360RateLineToRateCard(rateLine)
-  return {
-    ...resolveConfiguredPricingFromRateCard(rateCard, rateCardId),
-    summary: formatM360RateLineSummary(rateLine),
-  }
+  return resolveCatalogItemRateLinePricing(item, DEFAULT_M360_RATE_CARD_ID)
 }
 
 export function formatCatalogItemM360RateSummary(item: CatalogItemPricingInput): string | null {

@@ -64,9 +64,9 @@ import {
 } from './templateDemo'
 import { DEFAULT_PROVIDER_SERVICE_SELECTION, type ProviderServiceId } from './constants'
 import {
-  DEMO_CEDAR_RIDGE_CREDIT_ORG_ID,
-  DEMO_CEDAR_RIDGE_CREDIT_SLUG,
-  DEMO_CEDAR_RIDGE_CREDIT_TENANT_ID,
+  DEMO_HARBORLINE_CAPITAL_ORG_ID,
+  DEMO_HARBORLINE_CAPITAL_SLUG,
+  DEMO_HARBORLINE_CAPITAL_TENANT_ID,
   DEMO_NORTH_SUMMIT_BANK_ORG_ID,
 } from '../providerAdmin/organizations'
 import type { ProviderAdminNavId } from '../providerAdmin/constants'
@@ -173,7 +173,7 @@ function createBareMetalAiInferenceCatalogDraft(): ProviderCatalogDraft {
     displayName: SECOND_CATALOG_ITEM_DISPLAY_NAME,
     description: CATALOG_ITEM_DESCRIPTIONS_BY_ID[DEMO_CATALOG_ITEM_IDS.bareMetalDenseGpu],
     scope: 'vip-enterprise',
-    enterpriseTenantId: DEMO_CEDAR_RIDGE_CREDIT_TENANT_ID,
+    enterpriseTenantId: DEMO_HARBORLINE_CAPITAL_TENANT_ID,
     rateCard,
     serviceId: 'baremetal',
     instanceTypeId: BARE_METAL_AI_INFERENCE_INSTANCE_TYPE_ID,
@@ -252,7 +252,7 @@ function syncBareMetalAiInferenceCatalogItem(): void {
     current.templateRefId !== BARE_METAL_AI_INFERENCE_TEMPLATE_REF_ID ||
     current.displayName !== SECOND_CATALOG_ITEM_DISPLAY_NAME ||
     current.scope !== 'vip-enterprise' ||
-    current.enterpriseTenantId !== DEMO_CEDAR_RIDGE_CREDIT_TENANT_ID
+    current.enterpriseTenantId !== DEMO_HARBORLINE_CAPITAL_TENANT_ID
 
   if (needsIdentitySync) {
     rewriteProviderCatalogItemIdentity(current.catalogItemId, {
@@ -261,7 +261,7 @@ function syncBareMetalAiInferenceCatalogItem(): void {
       displayName: SECOND_CATALOG_ITEM_DISPLAY_NAME,
       description: current.description ?? '',
       scope: 'vip-enterprise',
-      enterpriseTenantId: DEMO_CEDAR_RIDGE_CREDIT_TENANT_ID,
+      enterpriseTenantId: DEMO_HARBORLINE_CAPITAL_TENANT_ID,
     })
   }
 
@@ -277,17 +277,17 @@ function syncBareMetalAiInferenceCatalogItem(): void {
   const denseGpu = synced
   const organizations = getProviderRegisteredOrganizations()
 
-  const cedarRidge = organizations.find(
+  const harborline = organizations.find(
     (organization) =>
-      organization.id === DEMO_CEDAR_RIDGE_CREDIT_ORG_ID ||
-      organization.slug === DEMO_CEDAR_RIDGE_CREDIT_SLUG,
+      organization.id === DEMO_HARBORLINE_CAPITAL_ORG_ID ||
+      organization.slug === DEMO_HARBORLINE_CAPITAL_SLUG,
   )
   if (
-    cedarRidge &&
-    (cedarRidge.catalogItemId !== denseGpu.catalogItemId ||
-      cedarRidge.catalogDisplayName !== denseGpu.displayName)
+    harborline &&
+    (harborline.catalogItemId !== denseGpu.catalogItemId ||
+      harborline.catalogDisplayName !== denseGpu.displayName)
   ) {
-    updateProviderRegisteredOrganization(cedarRidge.id, {
+    updateProviderRegisteredOrganization(harborline.id, {
       catalogItemId: denseGpu.catalogItemId,
       catalogDisplayName: denseGpu.displayName,
     })
@@ -468,6 +468,8 @@ function syncClusterNodeSetsCatalogItem(): void {
     synced.diskImageLabel !== formatClusterPlatformLabel(DEFAULT_CLUSTER_CATALOG_VERSION_ID) ||
     synced.instanceTypeId !== 'ocp-small' ||
     synced.instanceTypeLabel !== 'OpenShift small' ||
+    synced.rateCard.hourlyRate !== CLUSTER_NODE_SETS_RATE_CARD.hourlyRate ||
+    synced.rateCard.monthlyRate !== CLUSTER_NODE_SETS_RATE_CARD.monthlyRate ||
     !synced.diskImageId ||
     !synced.diskImageLabel
 
@@ -477,6 +479,7 @@ function syncClusterNodeSetsCatalogItem(): void {
       instanceTypeLabel: 'OpenShift small',
       diskImageId: DEFAULT_CLUSTER_CATALOG_VERSION_ID,
       diskImageLabel: formatClusterPlatformLabel(DEFAULT_CLUSTER_CATALOG_VERSION_ID),
+      rateCard: { ...CLUSTER_NODE_SETS_RATE_CARD },
     })
   }
 }
@@ -595,7 +598,7 @@ function syncDemoCatalogItemDescriptions(): void {
 /** Ensures demo catalog offerings exist for finished Provider Admin screens. */
 export function ensureProviderCatalogDemoItems(): ProviderCatalogDraft[] {
   ensureDemoBareMetalTemplates()
-  // So VIP enterprise labels can resolve Cedar Ridge Credit on catalog cards.
+  // So VIP enterprise labels can resolve Harborline Capital on catalog cards.
   ensureProviderDemoOrganizations()
 
   let items = getProviderCatalogItems()

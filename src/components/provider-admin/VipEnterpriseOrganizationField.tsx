@@ -200,7 +200,7 @@ export function VipEnterpriseOrganizationField({
           <Content component="p">
             Selected tenants without billing setup can still be assigned to VIP catalog items, but
             pricing and publish remain blocked until tenant registration links an M360 billing
-            account and rate card.
+            account.
           </Content>
         </Alert>
       ) : null}
