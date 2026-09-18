@@ -115,15 +115,9 @@ export function ProviderAdminBillingPage() {
         }
       />
 
-      <Alert
-        variant="info"
-        isInline
-        title="Account balances are not shown in OSAC"
-        className="provider-admin-billing__balance-alert"
-      >
+      <Alert variant="info" isInline title="Account balances are not shown in OSAC">
         <Content component="p">
-          OSAC uses M360 for account status and tenant linking only. Current balance, credits, and
-          payment history stay in M360 until that integration is available here.
+          OSAC uses M360 for account status and tenant linking only.
         </Content>
       </Alert>
 

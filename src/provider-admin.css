@@ -5713,14 +5713,14 @@ a.provider-admin-network-inventory__related-link:hover {
   min-inline-size: 8rem;
 }
 
+.provider-admin-billing.provider-admin-workspace-page {
+  gap: var(--pf-t--global--spacer--md);
+}
+
 .provider-admin-billing__kpi-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--pf-t--global--spacer--lg);
-}
-
-.provider-admin-billing__balance-alert {
-  margin-block-end: var(--pf-t--global--spacer--lg);
 }
 
 .provider-admin-billing__empty {
@@ -5852,6 +5852,10 @@ a.provider-admin-network-inventory__related-link:hover {
 .provider-admin-billing__tenant-link:focus {
   color: var(--pf-t--global--text--color--link--hover);
   text-decoration: underline;
+}
+
+.provider-admin-rate-cards.provider-admin-workspace-page {
+  gap: var(--pf-t--global--spacer--md);
 }
 
 .provider-admin-rate-cards__service-tabs {

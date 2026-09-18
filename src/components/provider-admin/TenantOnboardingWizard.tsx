@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useHref } from 'react-router-dom'
 import { ExclamationTriangleIcon } from '@patternfly/react-icons/dist/esm/icons/exclamation-triangle-icon'
 import { InfoCircleIcon } from '@patternfly/react-icons/dist/esm/icons/info-circle-icon'
 import { RedoIcon } from '@patternfly/react-icons/dist/esm/icons/redo-icon'
@@ -29,6 +30,7 @@ import {
   useWizardContext,
 } from '@patternfly/react-core'
 import { RouterButton } from '../RouterButton'
+import { ExternalLinkButton } from '../shared/ExternalLinkButton'
 import type { ProviderCatalogDraft } from '../../providerSetup/storage'
 import {
   BLUESOLACE_ONBOARDING_M360_ACCOUNT_NAME,
@@ -155,6 +157,7 @@ export function TenantOnboardingWizard({
   onPersistOrganization,
   onComplete,
 }: TenantOnboardingWizardProps) {
+  const m360AccountsHref = useHref(M360_ACCOUNTS_PATH)
   const [form, setForm] = useState<RegisterOrganizationForm>(() =>
     buildTenantOnboardingForm(getProviderRegisteredOrganizations()),
   )
@@ -832,9 +835,9 @@ export function TenantOnboardingWizard({
                   </Content>
                 </div>
                 <div className="tenant-onboarding__account-hint-actions">
-                  <RouterButton variant="link" isInline to={M360_ACCOUNTS_PATH}>
+                  <ExternalLinkButton href={m360AccountsHref} variant="link">
                     Open M360 accounts
-                  </RouterButton>
+                  </ExternalLinkButton>
                   <Button
                     variant="link"
                     isInline

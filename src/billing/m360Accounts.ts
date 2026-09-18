@@ -87,7 +87,7 @@ const DEMO_M360_ACCOUNTS: M360BillingAccount[] = [
     organizationCode: 'ORG-RWM',
     rateCardId: 'rate-enterprise-us',
     accountStatus: 'Inactive',
-    approvalStatus: 'Approved',
+    approvalStatus: 'Draft',
     externalId: null,
     linkedTenantSlug: null,
   },
