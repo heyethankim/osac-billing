@@ -1,6 +1,10 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { syncWorkspaceNavParam } from '../shared/workspaceNavUrl'
+import {
+  syncWorkspaceActionParam,
+  syncWorkspaceNavParam,
+  WORKSPACE_ACTION_REGISTER_TENANT,
+} from '../shared/workspaceNavUrl'
 import { ProviderAdminShell } from '../components/provider-admin/ProviderAdminShell'
 import { ProviderSetupWizardPanel } from '../components/provider-setup/ProviderSetupWizardPanel'
 import type { ProviderAdminNavId } from '../providerAdmin/constants'
@@ -34,7 +38,6 @@ import {
   addProviderCatalogItem,
   assignCatalogToRegisteredOrganization,
   setProviderActiveNav,
-  setProviderOpenRegisterOrgWizard,
   setProviderSelectedServices,
   setProviderSetupComplete,
 } from '../providerSetup/storage'
@@ -210,8 +213,19 @@ export function ProviderAdminWorkspacePage() {
   }
 
   const handleRegisterOrganization = () => {
-    setProviderOpenRegisterOrgWizard()
-    handleNavChange('administration-organizations')
+    const openRegister = () => {
+      setActiveNavId('administration-organizations')
+      setProviderActiveNav('administration-organizations')
+      setNavContentKey((current) => current + 1)
+      syncWorkspaceActionParam(setSearchParams, WORKSPACE_ACTION_REGISTER_TENANT)
+    }
+
+    if (catalogEditLeaveAttemptRef.current) {
+      catalogEditLeaveAttemptRef.current(openRegister)
+      return
+    }
+
+    openRegister()
   }
 
   const performNavChange = (navId: ProviderAdminNavId) => {

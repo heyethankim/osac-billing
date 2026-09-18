@@ -74,8 +74,11 @@ import {
 } from '../providerSetup/storage'
 import type { ProviderAdminNavId } from '../providerAdmin/constants'
 import {
+  getWorkspaceActionParam,
   getWorkspaceOrganizationParam,
+  syncWorkspaceActionParam,
   syncWorkspaceOrganizationParam,
+  WORKSPACE_ACTION_REGISTER_TENANT,
 } from '../shared/workspaceNavUrl'
 
 function formatRegisteredAt(iso: string): string {
@@ -233,8 +236,23 @@ export function ProviderAdminOrganizationsPage({
       setEditReturnToDetails(false)
       setOnboardingResumeOrganization(null)
       setIsOnboardingWizardOpen(true)
+      syncWorkspaceActionParam(setSearchParams, WORKSPACE_ACTION_REGISTER_TENANT, {
+        replace: true,
+      })
     }
-  }, [])
+  }, [setSearchParams])
+
+  useEffect(() => {
+    if (getWorkspaceActionParam(searchParams) !== WORKSPACE_ACTION_REGISTER_TENANT) {
+      return
+    }
+
+    setEditingOrganization(null)
+    setEditReturnToDetails(false)
+    setOnboardingResumeOrganization(null)
+    setIsDetailsOpen(false)
+    setIsOnboardingWizardOpen(true)
+  }, [searchParams])
 
   useEffect(() => {
     return () => {
@@ -324,6 +342,9 @@ export function ProviderAdminOrganizationsPage({
     setEditReturnToDetails(false)
     setOnboardingResumeOrganization(null)
     setIsOnboardingWizardOpen(true)
+    syncWorkspaceActionParam(setSearchParams, WORKSPACE_ACTION_REGISTER_TENANT, {
+      replace: true,
+    })
   }
 
   const openBillingSetup = (organization: RegisteredOrganization) => {
@@ -332,11 +353,17 @@ export function ProviderAdminOrganizationsPage({
     setOnboardingResumeOrganization(organization)
     setIsOnboardingWizardOpen(true)
     setIsDetailsOpen(false)
+    if (getWorkspaceActionParam(searchParams) === WORKSPACE_ACTION_REGISTER_TENANT) {
+      syncWorkspaceActionParam(setSearchParams, null, { replace: true })
+    }
   }
 
   const closeOnboardingWizard = () => {
     setIsOnboardingWizardOpen(false)
     setOnboardingResumeOrganization(null)
+    if (getWorkspaceActionParam(searchParams) === WORKSPACE_ACTION_REGISTER_TENANT) {
+      syncWorkspaceActionParam(setSearchParams, null, { replace: true })
+    }
   }
 
   const openEdit = (organization: RegisteredOrganization, returnToDetails = false) => {

@@ -45,8 +45,11 @@ import { findCatalogLinkedTemplate } from '../catalog/hardwareSpecs'
 import { getCatalogViewMode, setCatalogViewMode, type CatalogViewMode } from '../catalog/viewMode'
 import {
   findCatalogItemByWorkspaceParam,
+  getWorkspaceActionParam,
   getWorkspaceCatalogItemParam,
+  syncWorkspaceActionParam,
   syncWorkspaceCatalogItemParam,
+  WORKSPACE_ACTION_CREATE_CATALOG_ITEM,
 } from '../shared/workspaceNavUrl'
 import type { RegisteredOrganization } from '../providerAdmin/organizations'
 import { sortByDemoCatalogOrder } from '../providerSetup/prototypeEntry'
@@ -623,6 +626,9 @@ export function ProviderAdminCatalogPage({
     setIsPublishWizardOpen(false)
     setPublishResumeScope('global-public')
     setPublishResumeTenantId('')
+    if (getWorkspaceActionParam(searchParams) === WORKSPACE_ACTION_CREATE_CATALOG_ITEM) {
+      syncWorkspaceActionParam(setSearchParams, null, { replace: true })
+    }
   }
 
   const closeEditWizard = () => {
@@ -650,8 +656,20 @@ export function ProviderAdminCatalogPage({
     setPublishResumeScope('global-public')
     setPublishResumeTenantId('')
     setIsPublishWizardOpen(true)
-    syncWorkspaceCatalogItemParam(setSearchParams, null, { replace: true })
+    syncWorkspaceActionParam(setSearchParams, WORKSPACE_ACTION_CREATE_CATALOG_ITEM, {
+      replace: true,
+    })
   }
+
+  useEffect(() => {
+    if (getWorkspaceActionParam(searchParams) !== WORKSPACE_ACTION_CREATE_CATALOG_ITEM) {
+      return
+    }
+
+    setIsViewingDetails(false)
+    setIsEditWizardOpen(false)
+    setIsPublishWizardOpen(true)
+  }, [searchParams])
 
   useEffect(() => {
     if (!openCatalogItemKey) {
