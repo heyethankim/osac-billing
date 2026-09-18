@@ -145,15 +145,6 @@ function SingleEnterActions({
 export function BmaasLandingPage() {
   const providerPrototypeLinks: PrototypeLink[] = [
     {
-      label: 'Create catalog item',
-      to: '/provider/workspace?nav=catalog&action=create-catalog-item',
-      companionSeparator: ' · ',
-      companionLink: {
-        label: 'Register tenant',
-        to: '/provider/workspace?nav=administration-organizations&action=register-tenant',
-      },
-    },
-    {
       label: 'Tenants',
       to: '/provider/workspace?nav=administration-organizations',
       companionSeparator: ', ',
