@@ -1535,21 +1535,21 @@
 
 .provider-admin-catalog__vip-org-cards {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: var(--pf-t--global--spacer--sm);
+  max-width: 36rem;
 }
 
 .provider-admin-catalog__vip-org-card {
   position: relative;
-  display: inline-flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--pf-t--global--spacer--xs);
-  max-width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--sm);
+  width: 100%;
   margin: 0;
   padding-block: var(--pf-t--global--spacer--sm);
   padding-inline: var(--pf-t--global--spacer--md);
-  min-height: 2.25rem;
+  min-height: 2.75rem;
   text-align: start;
   border: var(--pf-t--global--border--width--regular) solid
     var(--pf-t--global--border--color--default);
@@ -1589,13 +1589,9 @@
   background-color: var(--pf-t--global--color--brand--default);
 }
 
-.provider-admin-catalog__vip-org-card-header {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--pf-t--global--spacer--xs);
-}
-
 .provider-admin-catalog__vip-org-card-name {
+  flex: 1 1 auto;
+  min-width: 0;
   font-weight: var(--pf-t--global--font--weight--body--bold);
   font-size: var(--pf-t--global--font--size--sm);
   color: var(--pf-t--global--text--color--regular);
@@ -1603,9 +1599,8 @@
 }
 
 .provider-admin-catalog__vip-org-card-status {
-  font-size: var(--pf-t--global--font--size--body--sm);
-  color: var(--pf-t--global--text--color--subtle);
-  line-height: var(--pf-t--global--font--line-height--body--sm);
+  flex-shrink: 0;
+  margin-inline-start: auto;
 }
 
 .provider-admin-catalog__vip-billing-alert {

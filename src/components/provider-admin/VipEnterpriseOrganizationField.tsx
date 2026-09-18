@@ -1,4 +1,4 @@
-import { Fragment, useState } from 'react'
+import { Fragment } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Alert,
@@ -6,17 +6,14 @@ import {
   Button,
   Content,
   FormGroup,
-  Modal,
-  ModalBody,
-  ModalFooter,
-  ModalHeader,
-  ModalVariant,
+  Label,
 } from '@patternfly/react-core'
 import { CheckIcon } from '@patternfly/react-icons/dist/esm/icons/check-icon'
 import { InfoCircleIcon } from '@patternfly/react-icons/dist/esm/icons/info-circle-icon'
 import {
   getOrganizationSetupSignal,
   isTenantBillingConfigured,
+  resolveTenantSetupStatus,
   type RegisteredOrganization,
 } from '../../providerAdmin/organizations'
 import { buildProviderOrganizationWorkspacePath } from '../../shared/workspaceNavUrl'
@@ -36,6 +33,19 @@ export function normalizeEnterpriseTenantIds(
   return trimmed ? [trimmed] : []
 }
 
+function getVipTenantStatusLabelColor(
+  organization: RegisteredOrganization,
+): 'green' | 'orange' | 'grey' {
+  const status = resolveTenantSetupStatus(organization)
+  if (status === 'ready') {
+    return 'green'
+  }
+  if (status === 'billing_configured') {
+    return 'orange'
+  }
+  return 'grey'
+}
+
 type VipEnterpriseOrganizationFieldProps = {
   organizations: RegisteredOrganization[]
   selectedTenantIds: string[]
@@ -51,7 +61,6 @@ export function VipEnterpriseOrganizationField({
   onRegisterOrganization,
   fieldIdPrefix,
 }: VipEnterpriseOrganizationFieldProps) {
-  const [isLeaveConfirmOpen, setIsLeaveConfirmOpen] = useState(false)
   const selectedIdSet = new Set(normalizeEnterpriseTenantIds(selectedTenantIds))
   const selectedOrganizations = organizations.filter((organization) =>
     selectedIdSet.has(organization.tenantId),
@@ -69,76 +78,27 @@ export function VipEnterpriseOrganizationField({
     onSelectedTenantIdsChange([...selectedIdSet, tenantId])
   }
 
-  const requestGoToOrganizations = () => {
-    if (!onRegisterOrganization) {
-      return
-    }
-    setIsLeaveConfirmOpen(true)
-  }
-
-  const closeLeaveConfirm = () => {
-    setIsLeaveConfirmOpen(false)
-  }
-
-  const confirmGoToOrganizations = () => {
-    setIsLeaveConfirmOpen(false)
-    onRegisterOrganization?.()
-  }
-
-  const leaveConfirmModal = onRegisterOrganization ? (
-    <Modal
-      variant={ModalVariant.small}
-      isOpen={isLeaveConfirmOpen}
-      onClose={closeLeaveConfirm}
-      aria-labelledby={`${fieldIdPrefix}-leave-orgs-title`}
-      aria-describedby={`${fieldIdPrefix}-leave-orgs-description`}
-    >
-      <ModalHeader
-        title="Are you sure?"
-        titleIconVariant="warning"
-        labelId={`${fieldIdPrefix}-leave-orgs-title`}
-      />
-      <ModalBody>
-        <Content component="p" id={`${fieldIdPrefix}-leave-orgs-description`}>
-          You will leave this catalog flow to register a new tenant. Unsaved progress may be
-          lost.
-        </Content>
-      </ModalBody>
-      <ModalFooter>
-        <Button variant="primary" onClick={confirmGoToOrganizations}>
-          Register a tenant
-        </Button>
-        <Button variant="link" onClick={closeLeaveConfirm}>
-          Cancel
-        </Button>
-      </ModalFooter>
-    </Modal>
-  ) : null
-
   if (organizations.length === 0) {
     return (
-      <>
-        <Alert
-          variant="warning"
-          isInline
-          title="No tenants yet"
-          className="provider-admin-catalog__vip-empty-alert"
-          actionLinks={
-            onRegisterOrganization ? (
-              <AlertActionLink component="button" onClick={requestGoToOrganizations}>
-                Register a tenant
-              </AlertActionLink>
-            ) : undefined
-          }
-        >
-          <Content component="p">
-            VIP enterprise needs at least one registered tenant to target. Register a new
-            tenant on the Tenants page, or save this catalog item as unpublished and
-            assign tenants later. You can also switch to Global public to publish now.
-          </Content>
-        </Alert>
-        {leaveConfirmModal}
-      </>
+      <Alert
+        variant="warning"
+        isInline
+        title="No tenants yet"
+        className="provider-admin-catalog__vip-empty-alert"
+        actionLinks={
+          onRegisterOrganization ? (
+            <AlertActionLink component="button" onClick={onRegisterOrganization}>
+              Register a tenant
+            </AlertActionLink>
+          ) : undefined
+        }
+      >
+        <Content component="p">
+          VIP enterprise needs at least one registered tenant to target. Register a tenant
+          inline, or save this catalog item as unpublished and assign tenants later. You can
+          also switch to Global public to publish now.
+        </Content>
+      </Alert>
     )
   }
 
@@ -170,20 +130,24 @@ export function VipEnterpriseOrganizationField({
                 aria-pressed={isSelected}
                 onClick={() => toggleOrganization(organization.tenantId)}
               >
-                <span className="provider-admin-catalog__vip-org-card-header">
-                  <span
-                    className={`provider-admin-catalog__vip-org-card-indicator${
-                      isSelected ? ' provider-admin-catalog__vip-org-card-indicator--selected' : ''
-                    }`}
-                    aria-hidden
-                  >
-                    {isSelected ? <CheckIcon /> : null}
-                  </span>
-                  <span className="provider-admin-catalog__vip-org-card-name">
-                    {organization.name.trim() || organization.tenantId}
-                  </span>
+                <span
+                  className={`provider-admin-catalog__vip-org-card-indicator${
+                    isSelected ? ' provider-admin-catalog__vip-org-card-indicator--selected' : ''
+                  }`}
+                  aria-hidden
+                >
+                  {isSelected ? <CheckIcon /> : null}
                 </span>
-                <span className="provider-admin-catalog__vip-org-card-status">{statusLabel}</span>
+                <span className="provider-admin-catalog__vip-org-card-name">
+                  {organization.name.trim() || organization.tenantId}
+                </span>
+                <Label
+                  color={getVipTenantStatusLabelColor(organization)}
+                  isCompact
+                  className="provider-admin-catalog__vip-org-card-status"
+                >
+                  {statusLabel}
+                </Label>
               </button>
             )
           })}
@@ -217,7 +181,7 @@ export function VipEnterpriseOrganizationField({
                 variant="link"
                 isInline
                 className="provider-admin-catalog__vip-orgs-hint-link"
-                onClick={requestGoToOrganizations}
+                onClick={onRegisterOrganization}
               >
                 Register a tenant
               </Button>
@@ -225,7 +189,6 @@ export function VipEnterpriseOrganizationField({
           </div>
         </div>
       ) : null}
-      {leaveConfirmModal}
     </div>
   )
 }

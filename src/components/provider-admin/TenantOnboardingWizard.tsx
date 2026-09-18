@@ -21,11 +21,14 @@ import {
   HelperText,
   HelperTextItem,
   Label,
+  Modal,
+  ModalVariant,
   Spinner,
   TextInput,
   Title,
   Wizard,
   WizardFooter,
+  WizardHeader,
   WizardStep,
   useWizardContext,
 } from '@patternfly/react-core'
@@ -89,6 +92,8 @@ import {
 
 type TenantOnboardingWizardProps = {
   isOpen: boolean
+  /** `page` replaces the Tenants list. Use `modal` when stacked over another flow (e.g. catalog create). */
+  presentation?: 'modal' | 'page'
   catalogDraft: ProviderCatalogDraft | null
   /** Resume billing setup for an existing tenant (starts on billing setup). */
   resumeOrganization?: RegisteredOrganization | null
@@ -151,12 +156,15 @@ function TenantOnboardingNavigateFooter({
 
 export function TenantOnboardingWizard({
   isOpen,
+  presentation = 'page',
   catalogDraft,
   resumeOrganization = null,
   onClose,
   onPersistOrganization,
   onComplete,
 }: TenantOnboardingWizardProps) {
+  const isPage = presentation === 'page'
+  const wizardTitle = resumeOrganization ? 'Edit tenant' : 'Register tenant'
   const m360AccountsHref = useHref(M360_ACCOUNTS_PATH)
   const [form, setForm] = useState<RegisterOrganizationForm>(() =>
     buildTenantOnboardingForm(getProviderRegisteredOrganizations()),
@@ -1000,9 +1008,20 @@ export function TenantOnboardingWizard({
     <Wizard
       key={resumeOrganization ? `tenant-onboarding-resume-${resumeOrganization.id}` : 'tenant-onboarding-wizard'}
       className="provider-admin-organizations__wizard tenant-onboarding__wizard"
-      height="100%"
-      isPlain
+      height={isPage ? '100%' : '40rem'}
+      isPlain={isPage}
+      onClose={isPage ? undefined : requestClose}
       startIndex={resumeOrganization ? 2 : 1}
+      header={
+        isPage ? undefined : (
+          <WizardHeader
+            title={wizardTitle}
+            titleId="tenant-onboarding-wizard-title"
+            onClose={requestClose}
+            closeButtonAriaLabel={`Close ${wizardTitle.toLowerCase()} wizard`}
+          />
+        )
+      }
     >
       {TENANT_ONBOARDING_STEPS.map((step) => (
         <WizardStep
@@ -1018,15 +1037,34 @@ export function TenantOnboardingWizard({
     </Wizard>
   )
 
+  if (isPage) {
+    return (
+      <ResourceCreatePageShell
+        parentLabel="Tenants"
+        title={wizardTitle}
+        titleId="tenant-onboarding-wizard-title"
+        onBack={requestClose}
+      >
+        {wizard}
+        {leaveConfirmModal}
+      </ResourceCreatePageShell>
+    )
+  }
+
   return (
-    <ResourceCreatePageShell
-      parentLabel="Tenants"
-      title={isResumeMode ? 'Edit tenant' : 'Register tenant'}
-      titleId="tenant-onboarding-wizard-title"
-      onBack={requestClose}
-    >
-      {wizard}
+    <>
+      <Modal
+        variant={ModalVariant.medium}
+        width="64rem"
+        maxWidth="64rem"
+        isOpen={isOpen}
+        onEscapePress={requestClose}
+        aria-labelledby="tenant-onboarding-wizard-title"
+        className="provider-admin-organizations__wizard-modal"
+      >
+        {wizard}
+      </Modal>
       {leaveConfirmModal}
-    </ResourceCreatePageShell>
+    </>
   )
 }

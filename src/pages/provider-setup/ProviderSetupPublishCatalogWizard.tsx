@@ -251,6 +251,12 @@ type ProviderSetupPublishCatalogWizardProps = {
   /** Resume VIP after registering an organization. */
   initialPublishScope?: PublishCatalogScope
   initialEnterpriseTenantId?: string
+  /**
+   * When set while the wizard is open, append this tenant to the VIP selection
+   * (e.g. after inline register-tenant modal completes).
+   */
+  selectEnterpriseTenantId?: string | null
+  onSelectEnterpriseTenantIdConsumed?: () => void
   /** Primary action label for the leave-without-saving confirm modal. */
   leaveConfirmActionLabel?: string
   /** Parent can invoke the same leave flow as Cancel / breadcrumb (e.g. sidebar nav). */
@@ -349,6 +355,8 @@ export function ProviderSetupPublishCatalogWizard({
   defaultDisplayName,
   initialPublishScope = 'global-public',
   initialEnterpriseTenantId = '',
+  selectEnterpriseTenantId = null,
+  onSelectEnterpriseTenantIdConsumed,
   leaveConfirmActionLabel,
   onRegisterRequestClose,
   onLeaveConfirmDismissed,
@@ -846,6 +854,23 @@ export function ProviderSetupPublishCatalogWizard({
       setEnterpriseTenantIds([firstOrganization.tenantId])
     }
   }, [isOpen, organizations, publishScope, enterpriseTenantIds])
+
+  useEffect(() => {
+    const tenantId = selectEnterpriseTenantId?.trim()
+    if (!isOpen || !tenantId) {
+      return
+    }
+
+    if (!organizations.some((organization) => organization.tenantId === tenantId)) {
+      return
+    }
+
+    setPublishScope('vip-enterprise')
+    setEnterpriseTenantIds((current) =>
+      current.includes(tenantId) ? current : [...current, tenantId],
+    )
+    onSelectEnterpriseTenantIdConsumed?.()
+  }, [isOpen, organizations, selectEnterpriseTenantId, onSelectEnterpriseTenantIdConsumed])
 
   useEffect(() => {
     if (!selectedServiceId || isEditMode) {

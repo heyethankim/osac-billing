@@ -30,6 +30,7 @@ import { CatalogViewToggle } from '../components/catalog/CatalogViewToggle'
 import { PillFilterSelect } from '../components/shared/PillFilterSelect'
 import { CatalogItemDetailsPage } from '../components/provider-admin/CatalogItemDetailsPage'
 import { CatalogPublishScopeIcon } from '../components/provider-admin/CatalogPublishScopeIcon'
+import { TenantOnboardingWizard } from '../components/provider-admin/TenantOnboardingWizard'
 import {
   formatVipEnterpriseVisibilityLabel,
   getCatalogEnterpriseTenantIds,
@@ -55,16 +56,20 @@ import type { RegisteredOrganization } from '../providerAdmin/organizations'
 import { sortByDemoCatalogOrder } from '../providerSetup/prototypeEntry'
 import type { CatalogItemStatus, ProviderCatalogDraft } from '../providerSetup/storage'
 import {
+  addProviderRegisteredOrganization,
+  assignCatalogToRegisteredOrganization,
+  assignExternalIpPoolToRegisteredOrganization,
   consumeProviderVipCatalogResumeIntent,
   duplicateProviderCatalogItem,
   getCatalogItemStatus,
+  getProviderCatalogDraft,
   getProviderCatalogItems,
   getProviderRegisteredOrganizations,
   getProviderSavedTemplate,
   deleteProviderCatalogItem,
   setProviderCatalogItemStatus,
-  setProviderVipCatalogResumeIntent,
   updateProviderCatalogItemFromPayload,
+  updateProviderRegisteredOrganization,
 } from '../providerSetup/storage'
 import {
   CATALOG_SERVICE_FILTER_LABELS,
@@ -338,7 +343,6 @@ export function ProviderAdminCatalogPage({
   onCreateCatalogItem,
   onCatalogItemsChange,
   isPublishing = false,
-  onRegisterOrganization,
   openCatalogItemKey = null,
   onOpenCatalogItemConsumed,
   onEditLeaveAttemptChange,
@@ -365,6 +369,8 @@ export function ProviderAdminCatalogPage({
   )
   const [publishResumeTenantId, setPublishResumeTenantId] = useState('')
   const [editResumeTenantId, setEditResumeTenantId] = useState<string | undefined>(undefined)
+  const [selectEnterpriseTenantId, setSelectEnterpriseTenantId] = useState<string | null>(null)
+  const [isRegisterTenantModalOpen, setIsRegisterTenantModalOpen] = useState(false)
   const [creatingCatalogItemId, setCreatingCatalogItemId] = useState<string | null>(null)
   const [creatingCardHeightPx, setCreatingCardHeightPx] = useState<number | null>(null)
   const [publishingCatalogItemId, setPublishingCatalogItemId] = useState<string | null>(null)
@@ -597,16 +603,52 @@ export function ProviderAdminCatalogPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only resume
   }, [])
 
-  const handleRegisterOrganizationFromVip = (intent: {
-    kind: 'publish'
-  } | {
-    kind: 'edit'
-    catalogItemId: string
-  }) => {
-    setProviderVipCatalogResumeIntent(intent)
-    setIsPublishWizardOpen(false)
-    setIsEditWizardOpen(false)
-    onRegisterOrganization?.()
+  const handleRegisterOrganizationFromVip = () => {
+    setIsRegisterTenantModalOpen(true)
+  }
+
+  const handleInlineRegisterPersist = (organization: RegisteredOrganization) => {
+    const existing = getProviderRegisteredOrganizations().find(
+      (item) => item.id === organization.id,
+    )
+    if (existing) {
+      updateProviderRegisteredOrganization(organization.id, {
+        name: organization.name,
+        tenantId: organization.tenantId,
+        displayName: organization.displayName,
+        m360AccountId: organization.m360AccountId,
+        m360ConnectionStatus: organization.m360ConnectionStatus,
+        m360RateCardId: organization.m360RateCardId,
+        m360RateCardName: organization.m360RateCardName,
+        billingAccountId: organization.billingAccountId,
+        billingAccountName: organization.billingAccountName,
+        billingAccountLinked: organization.billingAccountLinked,
+        tenantSetupStatus: organization.tenantSetupStatus,
+      })
+    } else {
+      addProviderRegisteredOrganization(organization)
+      if (organization.externalIpPoolId) {
+        assignExternalIpPoolToRegisteredOrganization(
+          organization.externalIpPoolId,
+          organization.id,
+        )
+      }
+      const catalogDraft = getProviderCatalogDraft()
+      if (organization.catalogItemId && catalogDraft) {
+        assignCatalogToRegisteredOrganization(organization.id, catalogDraft)
+      }
+    }
+    setOrganizations(getProviderRegisteredOrganizations())
+  }
+
+  const handleInlineRegisterComplete = (organization: RegisteredOrganization) => {
+    setOrganizations(getProviderRegisteredOrganizations())
+    setSelectEnterpriseTenantId(organization.tenantId)
+    setIsRegisterTenantModalOpen(false)
+  }
+
+  const closeInlineRegisterTenant = () => {
+    setIsRegisterTenantModalOpen(false)
   }
 
   const openDetails = (item: ProviderCatalogDraft) => {
@@ -995,6 +1037,8 @@ export function ProviderAdminCatalogPage({
           defaultTemplateRefId={newestCatalogItem?.templateRefId}
           initialPublishScope={publishResumeScope}
           initialEnterpriseTenantId={publishResumeTenantId}
+          selectEnterpriseTenantId={selectEnterpriseTenantId}
+          onSelectEnterpriseTenantIdConsumed={() => setSelectEnterpriseTenantId(null)}
           onClose={closeCreateWizard}
           onCreateCatalogItem={(payload) => {
             closeCreateWizard()
@@ -1009,7 +1053,7 @@ export function ProviderAdminCatalogPage({
               syncWorkspaceCatalogItemParam(setSearchParams, null, { replace: true })
             }
           }}
-          onRegisterOrganization={() => handleRegisterOrganizationFromVip({ kind: 'publish' })}
+          onRegisterOrganization={handleRegisterOrganizationFromVip}
           isPublishing={isPublishing}
         />
       ) : isEditWizardOpen && selectedCatalogItem ? (
@@ -1022,6 +1066,8 @@ export function ProviderAdminCatalogPage({
           organizations={organizations}
           initialPublishScope={selectedCatalogItem.scope}
           initialEnterpriseTenantId={editResumeTenantId}
+          selectEnterpriseTenantId={selectEnterpriseTenantId}
+          onSelectEnterpriseTenantIdConsumed={() => setSelectEnterpriseTenantId(null)}
           leaveConfirmActionLabel={
             editReturnToDetails ? 'Back to catalog item' : 'Go to Catalog'
           }
@@ -1034,12 +1080,7 @@ export function ProviderAdminCatalogPage({
           onClose={closeEditWizard}
           onCreateCatalogItem={() => undefined}
           onSaveCatalogItem={handleUpdateCatalogItemFromWizard}
-          onRegisterOrganization={() =>
-            handleRegisterOrganizationFromVip({
-              kind: 'edit',
-              catalogItemId: selectedCatalogItem.catalogItemId,
-            })
-          }
+          onRegisterOrganization={handleRegisterOrganizationFromVip}
         />
       ) : isViewingDetails && drawerCatalog ? (
         <CatalogItemDetailsPage
@@ -1436,6 +1477,15 @@ export function ProviderAdminCatalogPage({
           </Button>
         </ModalFooter>
       </Modal>
+
+      <TenantOnboardingWizard
+        presentation="modal"
+        isOpen={isRegisterTenantModalOpen}
+        catalogDraft={getProviderCatalogDraft()}
+        onClose={closeInlineRegisterTenant}
+        onPersistOrganization={handleInlineRegisterPersist}
+        onComplete={handleInlineRegisterComplete}
+      />
     </>
   )
 }
