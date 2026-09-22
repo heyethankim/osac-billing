@@ -5294,7 +5294,7 @@ a.provider-admin-network-inventory__related-link:hover {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--md);
 }
 
@@ -5723,12 +5723,17 @@ a.provider-admin-network-inventory__related-link:hover {
   color: var(--pf-t--global--text--color--subtle);
 }
 
+.provider-admin-billing__kpi-grid--two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .provider-admin-billing__kpi-grid--three {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 @media (max-width: 1200px) {
   .provider-admin-billing__kpi-grid,
+  .provider-admin-billing__kpi-grid--two,
   .provider-admin-billing__kpi-grid--three {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -5736,6 +5741,7 @@ a.provider-admin-network-inventory__related-link:hover {
 
 @media (max-width: 768px) {
   .provider-admin-billing__kpi-grid,
+  .provider-admin-billing__kpi-grid--two,
   .provider-admin-billing__kpi-grid--three {
     grid-template-columns: 1fr;
   }

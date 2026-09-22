@@ -1,7 +1,6 @@
-import { Fragment, useMemo } from 'react'
+import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { CheckCircleIcon } from '@patternfly/react-icons/dist/esm/icons/check-circle-icon'
-import { ExclamationTriangleIcon } from '@patternfly/react-icons/dist/esm/icons/exclamation-triangle-icon'
 import { ExternalLinkAltIcon } from '@patternfly/react-icons/dist/esm/icons/external-link-alt-icon'
 import { SyncIcon } from '@patternfly/react-icons/dist/esm/icons/sync-icon'
 import { UsersIcon } from '@patternfly/react-icons/dist/esm/icons/users-icon'
@@ -83,17 +82,7 @@ export function ProviderAdminBillingPage() {
     () => m360Accounts.filter((account) => account.accountStatus === 'Active'),
     [m360Accounts],
   )
-  const inactiveAccounts = useMemo(
-    () =>
-      m360Accounts
-        .filter((account) => account.accountStatus === 'Inactive')
-        .sort((left, right) =>
-          getM360AccountTenantName(left).localeCompare(getM360AccountTenantName(right)),
-        ),
-    [m360Accounts],
-  )
   const activeCount = activeAccounts.length
-  const inactiveCount = inactiveAccounts.length
   const linkedCount = linkedAccounts.length
 
   return (
@@ -120,7 +109,7 @@ export function ProviderAdminBillingPage() {
         </Content>
       </Alert>
 
-      <div className="provider-admin-billing__kpi-grid provider-admin-billing__kpi-grid--three">
+      <div className="provider-admin-billing__kpi-grid provider-admin-billing__kpi-grid--two">
         <Card isFullHeight className="provider-admin-billing__kpi-card">
           <CardHeader>
             <CardTitle>
@@ -152,61 +141,6 @@ export function ProviderAdminBillingPage() {
             <Content component="p" className="provider-admin-billing__kpi-hint">
               M360 accounts with an External ID linked to OSAC
             </Content>
-          </CardBody>
-        </Card>
-
-        <Card
-          isFullHeight
-          className={[
-            'provider-admin-billing__kpi-card',
-            inactiveCount > 0 ? 'provider-admin-billing__kpi-card--warning' : '',
-          ]
-            .filter(Boolean)
-            .join(' ')}
-        >
-          <CardHeader>
-            <CardTitle>
-              <ExclamationTriangleIcon className="provider-admin-billing__kpi-icon" aria-hidden />
-              Inactive M360 accounts
-            </CardTitle>
-          </CardHeader>
-          <CardBody>
-            <Title
-              headingLevel="h2"
-              size="4xl"
-              className={[
-                'provider-admin-billing__kpi-value',
-                inactiveCount > 0 ? 'provider-admin-billing__kpi-value--warning' : '',
-              ]
-                .filter(Boolean)
-                .join(' ')}
-            >
-              {inactiveCount}
-            </Title>
-            {inactiveCount > 0 ? (
-              <Content component="p" className="provider-admin-billing__kpi-detail">
-                {inactiveAccounts.map((account, index) => {
-                  const accountName = getM360AccountTenantName(account)
-
-                  return (
-                    <Fragment key={account.accountId}>
-                      {index > 0 ? ', ' : null}
-                      <Link
-                        to={buildM360AccountDetailPath(accountName)}
-                        className="provider-admin-billing__kpi-detail-link"
-                      >
-                        {accountName}
-                      </Link>
-                    </Fragment>
-                  )
-                })}{' '}
-                {inactiveAccounts.length === 1 ? 'is' : 'are'} inactive in M360.
-              </Content>
-            ) : (
-              <Content component="p" className="provider-admin-billing__kpi-hint">
-                No inactive M360 accounts
-              </Content>
-            )}
           </CardBody>
         </Card>
       </div>

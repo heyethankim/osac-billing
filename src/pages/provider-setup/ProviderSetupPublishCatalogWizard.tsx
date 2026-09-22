@@ -2468,7 +2468,7 @@ export function ProviderSetupPublishCatalogWizard({
               ) : null}
               <DescriptionListGroup>
                 <DescriptionListTerm>
-                  {isClusterService ? 'Estimated catalog rate' : 'M360 catalog rate'}
+                  M360 catalog rate
                 </DescriptionListTerm>
                 <DescriptionListDescription>
                   {isClusterService && resolvedClusterComposedRate ? (
